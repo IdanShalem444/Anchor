@@ -44,7 +44,13 @@ function inferSubjectType(name: string): SubjectType {
 }
 
 export interface CanvasImportPayload {
-  courses: { canvasId: number; name: string; courseCode?: string }[];
+  courses: {
+    canvasId: number;
+    name: string;
+    courseCode?: string;
+    syllabusBody?: string;
+    outcomes?: { title: string; description: string }[];
+  }[];
   assignments: {
     canvasId: number;
     courseCanvasId: number;
@@ -58,6 +64,7 @@ export interface CanvasImportPayload {
     grade?: string | null;
     feedback?: string[];
     gradedAt?: number | null;
+    rubric?: string;
   }[];
 }
 
@@ -71,6 +78,7 @@ function canvasBrief(
   if (a.points != null) lines.push(`Worth: ${a.points} marks`);
   if (a.url) lines.push(`Source: ${a.url}`);
   if (a.description && a.description.trim()) lines.push("", a.description.trim());
+  if (a.rubric && a.rubric.trim()) lines.push("", "Marking criteria:", a.rubric.trim());
   return lines.join("\n");
 }
 
@@ -637,8 +645,16 @@ export const useData = create<DataState>()(
                 color: SUBJECT_COLORS[count % SUBJECT_COLORS.length],
                 canvasCourseId: c.canvasId,
                 description: c.courseCode,
+                syllabus: c.syllabusBody || undefined,
+                outcomes: c.outcomes && c.outcomes.length ? c.outcomes : undefined,
               });
               subjectsAdded++;
+            } else if (c.syllabusBody || (c.outcomes && c.outcomes.length)) {
+              // Keep the syllabus + outcomes fresh on re-sync.
+              get().updateSubject(exists.id, {
+                ...(c.syllabusBody ? { syllabus: c.syllabusBody } : {}),
+                ...(c.outcomes && c.outcomes.length ? { outcomes: c.outcomes } : {}),
+              });
             }
           }
 

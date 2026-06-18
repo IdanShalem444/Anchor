@@ -79,6 +79,8 @@ export function ChatView({ chatId }: { chatId: string }) {
         summary: assessment?.generated?.summary,
         today: new Date().toISOString().slice(0, 10),
         assessments: pool,
+        syllabus: subject?.syllabus,
+        outcomes: subject?.outcomes,
       },
     });
     addMessage(thread.id, { role: "assistant", content: reply });

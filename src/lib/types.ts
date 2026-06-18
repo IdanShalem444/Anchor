@@ -53,6 +53,10 @@ export interface Subject {
   description?: string;
   /** Canvas course id when imported/synced from Canvas. */
   canvasCourseId?: number;
+  /** Course syllabus text (from Canvas), used to ground AI study materials. */
+  syllabus?: string;
+  /** Course learning outcomes / syllabus standards (from Canvas). */
+  outcomes?: { title: string; description: string }[];
   createdAt: number;
   deletedAt?: number | null;
 }

@@ -32,6 +32,9 @@ export interface ChatContext {
   notificationText?: string;
   summary?: AssessmentSummary;
   today?: string;
+  /** Course syllabus + learning outcomes (from Canvas), to ground answers. */
+  syllabus?: string;
+  outcomes?: { title: string; description: string }[];
   /** The student's assessments (for "what's next / due / my grades" questions). */
   assessments?: {
     title: string;

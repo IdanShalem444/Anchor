@@ -1,55 +1,40 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { uid } from "@/lib/format";
 import type { Difficulty, StudyNote, TestQuestion } from "@/lib/types";
 import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
 
-const BASE_URL =
-  process.env.OPENROUTER_BASE_URL?.replace(/\/$/, "") ||
-  "https://openrouter.ai/api/v1";
-const MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 
-export function enabled() {
-  return !!process.env.OPENROUTER_API_KEY;
+let client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!client) client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+  return client;
 }
 
-type Msg = { role: "system" | "user" | "assistant"; content: string };
+export function enabled() {
+  return !!process.env.ANTHROPIC_API_KEY;
+}
 
-async function complete(
-  messages: Msg[],
-  opts: { json?: boolean; maxTokens?: number } = {}
-): Promise<string> {
-  const call = (useJson: boolean) =>
-    fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://anchor.app",
-        "X-Title": "Anchor",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages,
-        temperature: 0.4,
-        max_tokens: opts.maxTokens ?? 2000,
-        ...(useJson ? { response_format: { type: "json_object" } } : {}),
-      }),
-    });
-  let res = await call(!!opts.json);
-  // Some models (e.g. Gemma) reject response_format — retry once without it.
-  if (!res.ok && opts.json) res = await call(false);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("OpenRouter: empty response");
-  return content;
+type Msg = { role: "user" | "assistant"; content: string };
+
+async function complete(system: string, messages: Msg[], maxTokens = 2000): Promise<string> {
+  const res = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: maxTokens,
+    system,
+    messages,
+  });
+  const text = (res.content as any[])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text as string)
+    .join("\n")
+    .trim();
+  if (!text) throw new Error("Anthropic: empty response");
+  return text;
 }
 
 function parseJson<T>(raw: string): T {
   let s = raw.trim();
-  // strip ``` fences if the model added them
   if (s.startsWith("```")) s = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = s.indexOf("{");
   const end = s.lastIndexOf("}");
@@ -60,39 +45,30 @@ function parseJson<T>(raw: string): T {
 const asArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
 
-function contextHeader(input: AnalyzeInput) {
-  return `Subject: ${input.subjectName} (type: ${input.subjectType}). Assessment: "${input.assessmentTitle}".`;
-}
+const header = (i: AnalyzeInput) =>
+  `Subject: ${i.subjectName} (type: ${i.subjectType}). Assessment: "${i.assessmentTitle}".`;
 
 export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
-  const sys =
+  const system =
     "You are Anchor, an expert study assistant for school and university students. " +
     "Analyse the student's assessment notification and produce study materials. " +
     "Respond with ONLY valid minified JSON (no markdown) matching this TypeScript type: " +
     `{summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
-    "dueDate must be ISO yyyy-mm-dd if a date is present, else omit. Make notes concrete and specific to the task. 6-10 flashcards. Tailor 'extras' to the subject (e.g. formula sheet for maths, techniques for English, definitions for science, vocabulary for languages). " +
-    `'plan' is an ordered list of concrete steps — ${
-      input.kind === "project"
-        ? "for this project/submission, how to actually complete and submit it (unpack brief, research, outline, draft/build, refine against criteria, submit)"
-        : "for this test/exam, a short revision sequence"
+    "dueDate is ISO yyyy-mm-dd if present, else omit. 6-10 flashcards. Tailor 'extras' to the subject. " +
+    `'plan' is ordered concrete steps — ${
+      input.kind === "project" ? "how to complete and submit this project" : "a short revision sequence"
     }.`;
-  const user = `${contextHeader(input)}\nType: ${
-    input.kind === "project" ? "project/submission to produce" : "test/exam to study for"
+  const user = `${header(input)}\nType: ${
+    input.kind === "project" ? "project/submission" : "test/exam"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
-  const raw = await complete(
-    [
-      { role: "system", content: sys },
-      { role: "user", content: user },
-    ],
-    { json: true, maxTokens: 2600 }
-  );
+  const raw = await complete(system, [{ role: "user", content: user }], 3000);
   const p = parseJson<any>(raw);
   const s = p.summary ?? {};
   const notes: StudyNote[] = Array.isArray(p.notes)
     ? p.notes.map((n: any) => ({ id: uid("nt"), heading: String(n.heading || "Note"), body: String(n.body || "") }))
     : [];
   const rev = p.revision ?? {};
-  if (!s.overview || notes.length === 0) throw new Error("OpenRouter analyze: incomplete result");
+  if (!s.overview || notes.length === 0) throw new Error("Anthropic analyze: incomplete result");
   return {
     summary: {
       overview: String(s.overview),
@@ -115,9 +91,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
         : [],
     },
     flashcards: Array.isArray(p.flashcards)
-      ? p.flashcards
-          .map((f: any) => ({ front: String(f.front || ""), back: String(f.back || "") }))
-          .filter((f: any) => f.front && f.back)
+      ? p.flashcards.map((f: any) => ({ front: String(f.front || ""), back: String(f.back || "") })).filter((f: any) => f.front && f.back)
       : [],
     plan: asArray(p.plan),
   };
@@ -126,52 +100,47 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
 export async function generateFlashcards(
   input: AnalyzeInput & { count?: number }
 ): Promise<{ front: string; back: string }[]> {
-  const sys =
+  const system =
     "You are Anchor, a study assistant. Create flashcards from the assessment. " +
     'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
     `Make ${input.count ?? 8} focused cards.`;
   const raw = await complete(
-    [
-      { role: "system", content: sys },
-      { role: "user", content: `${contextHeader(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` },
-    ],
-    { json: true, maxTokens: 1200 }
+    system,
+    [{ role: "user", content: `${header(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
+    1200
   );
   const p = parseJson<any>(raw);
-  const cards = Array.isArray(p.flashcards) ? p.flashcards : [];
-  const out = cards
+  const out = (Array.isArray(p.flashcards) ? p.flashcards : [])
     .map((f: any) => ({ front: String(f.front || ""), back: String(f.back || "") }))
     .filter((f: any) => f.front && f.back);
-  if (out.length === 0) throw new Error("OpenRouter flashcards: empty");
+  if (out.length === 0) throw new Error("Anthropic flashcards: empty");
   return out;
 }
 
 export async function generateTest(
   input: AnalyzeInput & { difficulty: Difficulty; count?: number }
 ): Promise<{ title: string; questions: TestQuestion[] }> {
-  const sys =
+  const system =
     "You are Anchor, a study assistant. Create a practice test from the assessment. " +
     'Respond with ONLY valid JSON: {"title":string,"questions":[{"type":"mcq"|"short"|"extended","prompt":string,"options"?:string[],"answerIndex"?:number,"modelAnswer"?:string}]}. ' +
-    `Difficulty: ${input.difficulty}. Include a mix; MCQs must have 4 options and a correct answerIndex; short/extended must include a modelAnswer.`;
+    `Difficulty: ${input.difficulty}. MCQs need 4 options + correct answerIndex; short/extended need a modelAnswer.`;
   const raw = await complete(
-    [
-      { role: "system", content: sys },
-      { role: "user", content: `${contextHeader(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` },
-    ],
-    { json: true, maxTokens: 2200 }
+    system,
+    [{ role: "user", content: `${header(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
+    2200
   );
   const p = parseJson<any>(raw);
-  const questions: TestQuestion[] = Array.isArray(p.questions)
-    ? p.questions.map((q: any) => ({
-        id: uid("q"),
-        type: q.type === "mcq" || q.type === "extended" ? q.type : "short",
-        prompt: String(q.prompt || ""),
-        options: Array.isArray(q.options) ? q.options.map((o: any) => String(o)) : undefined,
-        answerIndex: typeof q.answerIndex === "number" ? q.answerIndex : undefined,
-        modelAnswer: q.modelAnswer ? String(q.modelAnswer) : undefined,
-      })).filter((q: TestQuestion) => q.prompt)
-    : [];
-  if (questions.length === 0) throw new Error("OpenRouter test: empty");
+  const questions: TestQuestion[] = (Array.isArray(p.questions) ? p.questions : [])
+    .map((q: any) => ({
+      id: uid("q"),
+      type: q.type === "mcq" || q.type === "extended" ? q.type : "short",
+      prompt: String(q.prompt || ""),
+      options: Array.isArray(q.options) ? q.options.map((o: any) => String(o)) : undefined,
+      answerIndex: typeof q.answerIndex === "number" ? q.answerIndex : undefined,
+      modelAnswer: q.modelAnswer ? String(q.modelAnswer) : undefined,
+    }))
+    .filter((q: TestQuestion) => q.prompt);
+  if (questions.length === 0) throw new Error("Anthropic test: empty");
   return { title: String(p.title || `${input.difficulty} practice — ${input.assessmentTitle}`), questions };
 }
 
@@ -185,9 +154,7 @@ export async function chat(input: {
       c.assessments
         .map(
           (a) =>
-            `• ${a.title}${a.subject && !c.subject ? ` (${a.subject})` : ""} | ${
-              a.dueDate || "no due date"
-            } | ${a.status}${a.grade ? ` | grade ${a.grade}` : ""}`
+            `• ${a.title}${a.subject && !c.subject ? ` (${a.subject})` : ""} | ${a.dueDate || "no due date"} | ${a.status}${a.grade ? ` | grade ${a.grade}` : ""}`
         )
         .join("\n")
     : "";
@@ -205,13 +172,9 @@ export async function chat(input: {
     c.notificationText ? `Notification excerpt: ${c.notificationText.slice(0, 1500)}` : "",
     assessmentList,
   ].filter(Boolean);
-  const sys =
+  const system =
     "You are Anchor, a friendly, expert AI study tutor. Help the student understand, plan, draft and revise. " +
     "Be concise and practical. You DO have the student's assessment schedule and grades below — answer questions about what's next, what's due, deadlines and results directly from it (relative to today's date). Never tell the student to upload their schedule; you already have it.\n\n" +
     (ctxLines.length ? `Context:\n${ctxLines.join("\n")}` : "No assessments are linked yet — suggest they sync Canvas or add a subject.");
-  const msgs: Msg[] = [
-    { role: "system", content: sys },
-    ...input.messages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
-  ];
-  return complete(msgs, { maxTokens: 900 });
+  return complete(system, input.messages.slice(-12), 900);
 }

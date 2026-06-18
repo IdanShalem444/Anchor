@@ -3,10 +3,16 @@ export interface CanvasCreds {
   token: string;
 }
 
+export interface CanvasOutcome {
+  title: string;
+  description: string;
+}
 export interface CanvasCourse {
   canvasId: number;
   name: string;
   courseCode?: string;
+  syllabusBody?: string;
+  outcomes?: CanvasOutcome[];
 }
 export interface CanvasAssignment {
   canvasId: number;
@@ -21,6 +27,27 @@ export interface CanvasAssignment {
   grade?: string | null;
   feedback?: string[];
   gradedAt?: number | null;
+  /** Formatted marking rubric / criteria, if the assignment has one. */
+  rubric?: string;
+}
+
+/** Format a Canvas rubric (array of criteria) into readable marking criteria. */
+function formatRubric(rubric: any): string | undefined {
+  if (!Array.isArray(rubric) || rubric.length === 0) return undefined;
+  const lines = rubric.slice(0, 20).map((c: any) => {
+    const name = stripHtml(c.description) || "Criterion";
+    const pts = c.points != null ? ` (${c.points} pts)` : "";
+    const detail = stripHtml(c.long_description);
+    const ratings = Array.isArray(c.ratings)
+      ? c.ratings
+          .slice(0, 6)
+          .map((r: any) => `${stripHtml(r.description)}${r.points != null ? ` [${r.points}]` : ""}`)
+          .filter(Boolean)
+          .join("; ")
+      : "";
+    return `- ${name}${pts}${detail ? `: ${detail}` : ""}${ratings ? `\n   levels: ${ratings}` : ""}`;
+  });
+  return lines.join("\n").slice(0, 4000);
 }
 
 /** Classify a Canvas assignment as a test to study for vs. work to submit. */
@@ -77,7 +104,7 @@ export async function verifyCanvas(creds: CanvasCreds): Promise<{ name: string }
 export async function fetchCourses(creds: CanvasCreds): Promise<CanvasCourse[]> {
   const courses = await cget(
     creds,
-    "/courses?enrollment_state=active&state[]=available&per_page=100"
+    "/courses?enrollment_state=active&state[]=available&include[]=syllabus_body&per_page=100"
   );
   return (Array.isArray(courses) ? courses : [])
     .filter((c: any) => c && c.id && c.name && !c.access_restricted_by_date)
@@ -85,7 +112,35 @@ export async function fetchCourses(creds: CanvasCreds): Promise<CanvasCourse[]> 
       canvasId: c.id,
       name: c.name,
       courseCode: c.course_code || undefined,
+      syllabusBody: c.syllabus_body ? stripHtml(c.syllabus_body) : undefined,
     }));
+}
+
+/** Course learning outcomes / syllabus standards (one bounded call per course). */
+export async function fetchOutcomes(
+  creds: CanvasCreds,
+  courseId: number
+): Promise<CanvasOutcome[]> {
+  try {
+    const links = await cget(
+      creds,
+      `/courses/${courseId}/outcome_group_links?outcome_style=full&per_page=100`
+    );
+    if (!Array.isArray(links)) return [];
+    const seen = new Set<string>();
+    const out: CanvasOutcome[] = [];
+    for (const l of links) {
+      const o = l?.outcome;
+      const title = o?.title || o?.display_name;
+      if (!o || !title || seen.has(title)) continue;
+      seen.add(title);
+      out.push({ title: String(title), description: stripHtml(o.description).slice(0, 600) });
+      if (out.length >= 60) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchAssignments(
@@ -105,6 +160,7 @@ export async function fetchAssignments(
     url: x.html_url,
     points: x.points_possible ?? null,
     kind: classifyKind(x.name || "", x.submission_types || []),
+    rubric: formatRubric(x.rubric),
   }));
 }
 
@@ -173,7 +229,8 @@ export async function fetchAssignmentNotification(
   ).slice(0, 3);
 
   const files: { name: string }[] = [];
-  let text = "";
+  const rubric = formatRubric(a?.rubric);
+  let text = rubric ? `\n\n[Marking criteria]\n${rubric}` : "";
   for (const fid of ids) {
     try {
       const meta = await cget(creds, `/files/${fid}`);
@@ -203,10 +260,12 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
   await Promise.all(
     courses.map(async (c) => {
       try {
-        const [as, grades] = await Promise.all([
+        const [as, grades, outcomes] = await Promise.all([
           fetchAssignments(creds, c.canvasId),
           fetchSubmissions(creds, c.canvasId),
+          fetchOutcomes(creds, c.canvasId),
         ]);
+        if (outcomes.length) c.outcomes = outcomes;
         for (const a of as) {
           const g = grades.get(a.canvasId);
           if (g) {

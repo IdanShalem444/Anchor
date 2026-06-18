@@ -126,12 +126,30 @@ export function UploadNotification({
       fileType: fileName ? fileName.split(".").pop() : "text",
       uploadedAt: Date.now(),
     });
+    // Ground the AI in the real course syllabus + learning outcomes (from Canvas)
+    // so summaries, notes, flashcards and tests follow the actual curriculum.
+    const syllabusCtx: string[] = [];
+    if (subject.syllabus && subject.syllabus.trim()) {
+      syllabusCtx.push(`Course syllabus:\n${subject.syllabus.trim().slice(0, 3500)}`);
+    }
+    if (subject.outcomes && subject.outcomes.length) {
+      syllabusCtx.push(
+        "Course learning outcomes (syllabus standards):\n" +
+          subject.outcomes
+            .slice(0, 40)
+            .map((o) => `- ${o.title}${o.description ? `: ${o.description}` : ""}`)
+            .join("\n")
+      );
+    }
+    const aiText = syllabusCtx.length
+      ? `${content}\n\n=== Course context (use to align materials to the real syllabus) ===\n${syllabusCtx.join("\n\n")}`
+      : content;
     try {
       const result = await ai.analyzeAssessment({
         subjectType: subject.type,
         subjectName: subject.name,
         assessmentTitle: assessment.title,
-        text: content,
+        text: aiText,
         kind: assessment.kind,
       });
       setGenerated(assessment.id, {
