@@ -198,20 +198,28 @@ async function extractFileText(meta: any, buf: ArrayBuffer): Promise<string> {
   const ct = String(meta["content-type"] || meta.content_type || "").toLowerCase();
   try {
     if (name.endsWith(".pdf") || ct.includes("pdf")) {
-      const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
+      const mod: any = await import("pdf-parse/lib/pdf-parse.js");
+      const pdfParse = mod.default ?? mod;
       const data = await pdfParse(Buffer.from(buf));
       return String(data.text || "").slice(0, 8000);
     }
-    if (name.endsWith(".docx") || ct.includes("word") || ct.includes("officedocument")) {
-      const mammoth: any = await import("mammoth");
+    if (
+      name.endsWith(".docx") ||
+      ct.includes("word") ||
+      ct.includes("officedocument") ||
+      ct.includes("vnd.openxmlformats")
+    ) {
+      // mammoth's methods live under `.default` in some bundles, top-level in others.
+      const mod: any = await import("mammoth");
+      const mammoth = mod.extractRawText ? mod : mod.default ?? mod;
       const res = await mammoth.extractRawText({ buffer: Buffer.from(buf) });
       return String(res.value || "").slice(0, 8000);
     }
     if (name.endsWith(".txt") || name.endsWith(".md") || ct.startsWith("text/")) {
       return Buffer.from(buf).toString("utf8").slice(0, 8000);
     }
-  } catch {
-    // unreadable file — skip
+  } catch (e) {
+    console.error(`[canvas] file extract failed for "${name}" (${ct}):`, e);
   }
   return "";
 }
@@ -224,27 +232,44 @@ export async function fetchAssignmentNotification(
 ): Promise<{ text: string; files: { name: string }[] }> {
   const a = await cget(creds, `/courses/${courseId}/assignments/${assignmentId}`);
   const desc: string = a?.description || "";
+  // Canvas embeds file links as /files/123, /courses/12/files/123 or
+  // .../files/123/download — capture the id from any of those shapes.
   const ids = Array.from(
-    new Set([...desc.matchAll(/\/files\/(\d+)/g)].map((m) => m[1]))
-  ).slice(0, 3);
+    new Set([...desc.matchAll(/files\/(\d+)/g)].map((m) => m[1]))
+  ).slice(0, 4);
 
   const files: { name: string }[] = [];
   const rubric = formatRubric(a?.rubric);
   let text = rubric ? `\n\n[Marking criteria]\n${rubric}` : "";
+  if (ids.length === 0) {
+    console.warn(`[canvas] no file links found in assignment ${assignmentId} description`);
+  }
   for (const fid of ids) {
     try {
-      const meta = await cget(creds, `/files/${fid}`);
-      if (!meta?.url) continue;
-      const fr = await fetch(meta.url);
-      if (!fr.ok) continue;
+      // Some instances only resolve the file in its course scope.
+      let meta: any = await cget(creds, `/files/${fid}`).catch(() => null);
+      if (!meta?.url) meta = await cget(creds, `/courses/${courseId}/files/${fid}`).catch(() => null);
+      if (!meta?.url) {
+        console.warn(`[canvas] file ${fid}: no download url`);
+        continue;
+      }
+      // The signed url works unauthenticated; retry with the token if it 401s.
+      let fr = await fetch(meta.url);
+      if (!fr.ok) fr = await fetch(meta.url, { headers: { Authorization: `Bearer ${creds.token}` } });
+      if (!fr.ok) {
+        console.warn(`[canvas] file ${fid} download failed: ${fr.status}`);
+        continue;
+      }
       const t = await extractFileText(meta, await fr.arrayBuffer());
+      const fname = meta.display_name || meta.filename || `file ${fid}`;
       if (t.trim()) {
-        const fname = meta.display_name || meta.filename || `file ${fid}`;
         files.push({ name: fname });
         text += `\n\n[Attached: ${fname}]\n${t.trim()}`;
+      } else {
+        console.warn(`[canvas] file ${fid} ("${fname}") extracted no text`);
       }
-    } catch {
-      // skip a file that fails
+    } catch (e) {
+      console.error(`[canvas] file ${fid} failed:`, e);
     }
   }
   return { text: text.trim(), files };
