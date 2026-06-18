@@ -15,18 +15,17 @@ export function AnchorMark({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={2.2}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn("text-anchor", className)}
       aria-hidden="true"
     >
-      <circle cx="12" cy="5" r="2.4" />
-      <line x1="12" y1="7.4" x2="12" y2="21" />
-      <line x1="7.5" y1="11.5" x2="16.5" y2="11.5" />
-      <path d="M5 14.5a7 7 0 0 0 14 0" />
-      <line x1="5" y1="14.5" x2="3.2" y2="14.5" />
-      <line x1="19" y1="14.5" x2="20.8" y2="14.5" />
+      {/* radiating concentric arcs (ripple) + centre dot */}
+      <circle cx="4.5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M4.5 8 A4 4 0 0 1 4.5 16" />
+      <path d="M4.5 4.5 A7.5 7.5 0 0 1 4.5 19.5" />
+      <path d="M4.5 1 A11 11 0 0 1 4.5 23" />
     </svg>
   );
 }
