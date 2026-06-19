@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
 import { useData } from "@/store/data";
 import { ai } from "@/lib/ai";
-import { subjectById, assessmentById } from "@/lib/selectors";
+import { subjectById, assessmentById, researchForSubject } from "@/lib/selectors";
 import { AnchorMark } from "@/components/brand/AnchorLogo";
 
 const SUGGESTIONS = [
@@ -81,6 +81,9 @@ export function ChatView({ chatId }: { chatId: string }) {
         assessments: pool,
         syllabus: subject?.syllabus,
         outcomes: subject?.outcomes,
+        research: researchForSubject(d, subject?.id)
+          .slice(0, 12)
+          .map((r) => ({ query: r.query, title: r.title, excerpt: r.excerpt })),
       },
     });
     addMessage(thread.id, { role: "assistant", content: reply });

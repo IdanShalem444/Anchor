@@ -1,6 +1,13 @@
-import type { Assessment, Reminder, Subject } from "@/lib/types";
+import type { Assessment, Reminder, ResearchEntry, Subject } from "@/lib/types";
 import type { UserData } from "@/store/data";
 import { daysUntil, isThisWeek } from "@/lib/format";
+
+export function researchForSubject(d: UserData, subjectId?: string): ResearchEntry[] {
+  if (!subjectId) return [];
+  return (d.research || [])
+    .filter((r) => r.subjectId === subjectId)
+    .sort((a, b) => b.at - a.at);
+}
 
 export function activeSubjects(d: UserData): Subject[] {
   return d.subjects.filter((s) => !s.deletedAt);

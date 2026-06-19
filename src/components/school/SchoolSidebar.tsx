@@ -12,6 +12,7 @@ import {
   CalendarRange,
   Paperclip,
   Table2,
+  Globe,
   Plus,
   type LucideIcon,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const NAV: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Subjects", href: "/school/subjects", icon: GraduationCap },
   { label: "Assessments", href: "/school/assessments", icon: FileText },
   { label: "AI Tutor", href: "/school/tutor", icon: Sparkles },
+  { label: "Research", href: "/school/research", icon: Globe },
   { label: "Flashcards", href: "/school/flashcards", icon: Layers },
   { label: "Tests", href: "/school/tests", icon: ClipboardCheck },
   { label: "Revision", href: "/school/revision", icon: NotebookPen },

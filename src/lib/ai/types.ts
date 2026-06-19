@@ -35,6 +35,8 @@ export interface ChatContext {
   /** Course syllabus + learning outcomes (from Canvas), to ground answers. */
   syllabus?: string;
   outcomes?: { title: string; description: string }[];
+  /** Web research the student captured for this subject (in-app browser). */
+  research?: { query?: string; title?: string; excerpt?: string }[];
   /** The student's assessments (for "what's next / due / my grades" questions). */
   assessments?: {
     title: string;

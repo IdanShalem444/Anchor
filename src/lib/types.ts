@@ -61,6 +61,21 @@ export interface Subject {
   deletedAt?: number | null;
 }
 
+/** A captured web search or viewed page from the in-app research browser. */
+export interface ResearchEntry {
+  id: string;
+  subjectId: string;
+  kind: "search" | "view";
+  /** Search query (kind = "search"). */
+  query?: string;
+  /** Page url + title (kind = "view"). */
+  url?: string;
+  title?: string;
+  /** Readable text excerpt captured from the page (kind = "view"). */
+  excerpt?: string;
+  at: number;
+}
+
 export type Priority = "low" | "medium" | "high";
 export type AssessmentStatus = "not-started" | "in-progress" | "completed";
 export type Term = "Term 1" | "Term 2" | "Term 3" | "Term 4";
