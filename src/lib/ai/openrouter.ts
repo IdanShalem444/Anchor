@@ -5,7 +5,17 @@ import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
 const BASE_URL =
   process.env.OPENROUTER_BASE_URL?.replace(/\/$/, "") ||
   "https://openrouter.ai/api/v1";
-const MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+
+// Primary model + optional comma-separated fallbacks. Free models are often
+// rate-limited individually, so we try them in order until one responds — this
+// keeps real AI working for all users without paid credit.
+const MODELS = [
+  process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+  ...(process.env.OPENROUTER_FALLBACK_MODELS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+];
 
 export function enabled() {
   return !!process.env.OPENROUTER_API_KEY;
@@ -17,7 +27,7 @@ async function complete(
   messages: Msg[],
   opts: { json?: boolean; maxTokens?: number } = {}
 ): Promise<string> {
-  const call = (useJson: boolean) =>
+  const call = (model: string, useJson: boolean) =>
     fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -27,24 +37,35 @@ async function complete(
         "X-Title": "Anchor",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         messages,
         temperature: 0.4,
         max_tokens: opts.maxTokens ?? 2000,
         ...(useJson ? { response_format: { type: "json_object" } } : {}),
       }),
     });
-  let res = await call(!!opts.json);
-  // Some models (e.g. Gemma) reject response_format — retry once without it.
-  if (!res.ok && opts.json) res = await call(false);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 300)}`);
+
+  let lastErr = "no model configured";
+  for (const model of MODELS) {
+    try {
+      let res = await call(model, !!opts.json);
+      // Some models reject response_format — retry once without it.
+      if (!res.ok && opts.json) res = await call(model, false);
+      if (res.ok) {
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content;
+        if (typeof content === "string" && content.trim()) return content;
+        lastErr = `${model}: empty response`;
+        continue;
+      }
+      const body = await res.text().catch(() => "");
+      lastErr = `${model} ${res.status}: ${body.slice(0, 160)}`;
+      // 429 / 5xx / bad-slug → fall through to the next model.
+    } catch (e) {
+      lastErr = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("OpenRouter: empty response");
-  return content;
+  throw new Error(`OpenRouter — all models failed. Last: ${lastErr}`);
 }
 
 function parseJson<T>(raw: string): T {
@@ -52,9 +73,70 @@ function parseJson<T>(raw: string): T {
   // strip ``` fences if the model added them
   if (s.startsWith("```")) s = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = s.indexOf("{");
+  if (start > 0) s = s.slice(start);
   const end = s.lastIndexOf("}");
-  if (start > 0 || end < s.length - 1) s = s.slice(start, end + 1);
-  return JSON.parse(s) as T;
+  if (end >= 0 && end < s.length - 1) s = s.slice(0, end + 1);
+
+  const tryParse = (str: string): T | null => {
+    try {
+      return JSON.parse(str) as T;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) straight parse
+  let out = tryParse(s);
+  if (out) return out;
+
+  // 2) remove trailing commas (a common model slip)
+  out = tryParse(s.replace(/,\s*([}\]])/g, "$1"));
+  if (out) return out;
+
+  // 3) repair truncated JSON — close any open strings/brackets, drop a dangling
+  //    trailing fragment. Free models often get cut off mid-array.
+  const stack: string[] = [];
+  let inStr = false;
+  let esc = false;
+  let lastSafe = 0; // index just after the last complete top-level-ish token
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{" || c === "[") stack.push(c);
+    else if (c === "}" || c === "]") stack.pop();
+    if (!inStr && (c === "}" || c === "]")) lastSafe = i + 1;
+  }
+  let fixed = s;
+  if (inStr) fixed = fixed.slice(0, lastSafe || fixed.length); // drop partial string/element
+  // rebuild the bracket stack for the (possibly trimmed) string
+  const stack2: string[] = [];
+  let inStr2 = false;
+  let esc2 = false;
+  for (let i = 0; i < fixed.length; i++) {
+    const c = fixed[i];
+    if (inStr2) {
+      if (esc2) esc2 = false;
+      else if (c === "\\") esc2 = true;
+      else if (c === '"') inStr2 = false;
+      continue;
+    }
+    if (c === '"') inStr2 = true;
+    else if (c === "{" || c === "[") stack2.push(c);
+    else if (c === "}" || c === "]") stack2.pop();
+  }
+  fixed = fixed.replace(/,\s*$/, "");
+  while (stack2.length) fixed += stack2.pop() === "{" ? "}" : "]";
+  fixed = fixed.replace(/,\s*([}\]])/g, "$1");
+  out = tryParse(fixed);
+  if (out) return out;
+
+  throw new Error("OpenRouter: could not parse model JSON");
 }
 
 const asArray = (v: unknown): string[] =>
@@ -84,7 +166,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
       { role: "system", content: sys },
       { role: "user", content: user },
     ],
-    { json: true, maxTokens: 2600 }
+    { json: true, maxTokens: 4000 }
   );
   const p = parseJson<any>(raw);
   const s = p.summary ?? {};
