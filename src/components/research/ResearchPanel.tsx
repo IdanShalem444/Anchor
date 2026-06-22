@@ -12,6 +12,8 @@ import {
   Sparkles,
   BookmarkCheck,
   Check,
+  Monitor,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -61,6 +63,8 @@ export function ResearchPanel() {
 
   const [viewing, setViewing] = useState<ReadResult | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  // "live" = embed the real page; "reader" = clean server-extracted text.
+  const [viewMode, setViewMode] = useState<"live" | "reader">("live");
 
   const [summarising, setSummarising] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
@@ -113,11 +117,16 @@ export function ResearchPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: r.url }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Couldn't open that page");
-      const page: ReadResult = { title: data.title || r.title, text: data.text || "", url: data.url || r.url };
+      const data = await res.json().catch(() => ({}));
+      const page: ReadResult = {
+        title: data.title || r.title,
+        text: res.ok ? data.text || "" : "",
+        url: data.url || r.url,
+      };
+      // Show the page either way — Live view still works even if the server
+      // couldn't extract readable text for the Reader tab.
       setViewing(page);
-      if (capture)
+      if (capture && page.text)
         addResearchEntry({
           subjectId: subject.id,
           kind: "view",
@@ -125,8 +134,8 @@ export function ResearchPanel() {
           title: page.title,
           excerpt: page.text.slice(0, 1500),
         });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't open that page");
+    } catch {
+      setViewing({ title: r.title, text: "", url: r.url });
     } finally {
       setOpening(null);
     }
@@ -284,40 +293,90 @@ export function ResearchPanel() {
         <p className="rounded-2xl bg-red-500/[0.07] px-4 py-2.5 text-[13px] text-red-700">{error}</p>
       )}
 
-      {/* Reader view */}
+      {/* Page view — browser-style toolbar + Live / Reader */}
       <AnimatePresence mode="wait">
         {viewing ? (
           <motion.div
-            key="reader"
+            key="page"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
           >
-            <GlassCard className="p-5 sm:p-6">
-              <div className="flex items-start gap-3">
-                <Button variant="subtle" size="sm" onClick={() => setViewing(null)}>
-                  <ArrowLeft size={15} /> Results
-                </Button>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-lg font-semibold text-ink">{viewing.title}</h2>
-                  <a
-                    href={viewing.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[12.5px] text-anchor hover:underline"
+            <GlassCard className="overflow-hidden">
+              {/* toolbar */}
+              <div className="flex items-center gap-2 border-b border-black/[0.06] bg-white/50 px-3 py-2.5">
+                <button
+                  onClick={() => setViewing(null)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-black/[0.06]"
+                  title="Back to results"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <a
+                  href={viewing.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-black/[0.04] px-3 py-1.5 text-[12.5px] text-ink-soft transition-colors hover:bg-black/[0.06]"
+                  title={viewing.url}
+                >
+                  <Globe size={13} className="shrink-0 text-ink-faint" />
+                  <span className="truncate">{viewing.url}</span>
+                  <ExternalLink size={12} className="ml-auto shrink-0 text-ink-faint" />
+                </a>
+                {/* Live / Reader switch */}
+                <div className="flex shrink-0 items-center rounded-lg bg-black/[0.05] p-0.5 text-[12px] font-medium">
+                  <button
+                    onClick={() => setViewMode("live")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors",
+                      viewMode === "live" ? "bg-white text-ink shadow-soft" : "text-ink-soft"
+                    )}
                   >
-                    {hostOf(viewing.url)} <ExternalLink size={12} />
-                  </a>
+                    <Monitor size={13} /> Live
+                  </button>
+                  <button
+                    onClick={() => setViewMode("reader")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors",
+                      viewMode === "reader" ? "bg-white text-ink shadow-soft" : "text-ink-soft"
+                    )}
+                  >
+                    <FileText size={13} /> Reader
+                  </button>
                 </div>
                 {capture && (
-                  <span className="flex items-center gap-1 rounded-full bg-anchor/10 px-2.5 py-1 text-[11.5px] font-medium text-anchor">
+                  <span className="hidden shrink-0 items-center gap-1 rounded-full bg-anchor/10 px-2.5 py-1 text-[11.5px] font-medium text-anchor sm:flex">
                     <BookmarkCheck size={12} /> Saved
                   </span>
                 )}
               </div>
-              <div className="mt-4 max-h-[60vh] overflow-y-auto whitespace-pre-wrap text-[14px] leading-relaxed text-ink-soft">
-                {viewing.text || "No readable text could be extracted from this page."}
-              </div>
+
+              {viewMode === "live" ? (
+                <div className="relative">
+                  <iframe
+                    src={viewing.url}
+                    title={viewing.title}
+                    className="h-[68vh] w-full bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                  <p className="border-t border-black/[0.06] bg-white/60 px-4 py-1.5 text-center text-[11.5px] text-ink-faint">
+                    Page blank? That site blocks embedding — switch to{" "}
+                    <button onClick={() => setViewMode("reader")} className="font-medium text-anchor hover:underline">
+                      Reader
+                    </button>{" "}
+                    to read it here.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-5 sm:p-6">
+                  <h2 className="text-lg font-semibold text-ink">{viewing.title}</h2>
+                  <div className="mt-3 max-h-[62vh] overflow-y-auto whitespace-pre-wrap text-[14px] leading-relaxed text-ink-soft">
+                    {viewing.text || "No readable text could be extracted from this page."}
+                  </div>
+                </div>
+              )}
             </GlassCard>
           </motion.div>
         ) : (
