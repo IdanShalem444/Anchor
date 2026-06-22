@@ -96,18 +96,52 @@ async function duckDuckGoSearch(query: string): Promise<SearchResult[]> {
   return out;
 }
 
+/** Wikipedia search — keyless and reliable from datacenter IPs (works on Vercel
+ *  when DuckDuckGo's scrape endpoint blocks server requests). */
+async function wikipediaSearch(query: string): Promise<SearchResult[]> {
+  const res = await fetchText(
+    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+      query
+    )}&srlimit=8&format=json`,
+    { headers: { Accept: "application/json" } }
+  );
+  if (!res.ok) throw new Error(`Wikipedia ${res.status}`);
+  const data: any = await res.json();
+  const hits = data?.query?.search;
+  if (!Array.isArray(hits)) return [];
+  return hits.map((h: any) => ({
+    title: String(h.title || ""),
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(String(h.title || "").replace(/ /g, "_"))}`,
+    snippet: stripTags(String(h.snippet || "")),
+  }));
+}
+
 export async function webSearch(query: string): Promise<SearchResult[]> {
   const q = query.trim();
   if (!q) return [];
   const key = process.env.BRAVE_API_KEY;
   if (key) {
     try {
-      return await braveSearch(q, key);
+      const r = await braveSearch(q, key);
+      if (r.length) return r;
     } catch (e) {
-      console.error("[research] Brave search failed, falling back to DuckDuckGo:", e);
+      console.error("[research] Brave search failed:", e);
     }
   }
-  return duckDuckGoSearch(q);
+  try {
+    const r = await duckDuckGoSearch(q);
+    if (r.length) return r;
+    console.warn("[research] DuckDuckGo returned no results (likely blocked) — using Wikipedia");
+  } catch (e) {
+    console.error("[research] DuckDuckGo search failed:", e);
+  }
+  // Guaranteed keyless fallback so there are always results.
+  try {
+    return await wikipediaSearch(q);
+  } catch (e) {
+    console.error("[research] Wikipedia search failed:", e);
+    return [];
+  }
 }
 
 /** Block requests to local / internal addresses (basic SSRF protection). */

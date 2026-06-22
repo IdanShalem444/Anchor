@@ -67,10 +67,20 @@ export function ResearchPanel() {
 
   const captured = researchForSubject(d, subject?.id);
 
+  function looksLikeUrl(s: string): boolean {
+    return /^https?:\/\//i.test(s) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s);
+  }
+
   async function search(e?: React.FormEvent) {
     e?.preventDefault();
     const q = query.trim();
     if (!q || !subject) return;
+    // If they typed/pasted a link, open it directly in the reader.
+    if (looksLikeUrl(q)) {
+      const url = /^https?:\/\//i.test(q) ? q : `https://${q}`;
+      await open({ title: url, url, snippet: "" });
+      return;
+    }
     setSearching(true);
     setError(null);
     setViewing(null);
@@ -225,7 +235,7 @@ export function ResearchPanel() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search the web for ${subject?.name ?? "this subject"}…`}
+              placeholder={`Search, or paste a link to read it…`}
               className="pl-10"
             />
           </div>
@@ -339,9 +349,13 @@ export function ResearchPanel() {
               <div className="rounded-3xl border border-dashed border-black/[0.08] px-6 py-12 text-center">
                 <Globe className="mx-auto text-ink-faint" size={26} />
                 <p className="mt-3 text-sm text-ink-muted">
-                  Search the web for {subject?.name}. Open a result to read it here —
-                  {capture ? " it's saved and " : " turn on AI capture and it'll be "}
+                  Search for {subject?.name}, or paste any link to read it here.
+                  {capture ? " Pages you open are saved and " : " Turn on AI capture and they'll be "}
                   used when Anchor generates your notes & flashcards.
+                </p>
+                <p className="mx-auto mt-2 max-w-md text-[12px] text-ink-faint">
+                  Tip: add a free Brave Search API key in Vercel for full web search —
+                  without it, search uses Wikipedia (you can still open any link directly).
                 </p>
               </div>
             )}
