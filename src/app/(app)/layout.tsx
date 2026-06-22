@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { NavBar } from "@/components/nav/NavBar";
+import { DesktopNotifier } from "@/components/DesktopNotifier";
 import { Splash } from "@/components/Splash";
 import { useAuth, useCurrentUser } from "@/store/auth";
 import { useData } from "@/store/data";
@@ -32,6 +33,7 @@ export default function AppLayout({
   return (
     <div className="relative min-h-dvh">
       <NavBar />
+      <DesktopNotifier />
       <div className="pt-[88px]">{children}</div>
     </div>
   );

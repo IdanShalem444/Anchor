@@ -1,0 +1,41 @@
+{
+  "name": "anchor-study-desktop",
+  "version": "0.1.0",
+  "description": "Anchor — the desktop app. Premium study + organisation, with native reminders and a menu-bar widget.",
+  "main": "main.js",
+  "bin": {
+    "anchor": "bin/anchor.js"
+  },
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "author": "Anchor",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^31.7.6"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "app.anchor.study",
+    "productName": "Anchor",
+    "files": ["main.js", "preload.js", "bin/**/*", "assets/**/*"],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Education"
+    }
+  }
+}
