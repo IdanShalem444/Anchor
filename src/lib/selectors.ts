@@ -39,8 +39,40 @@ export function subjectProgress(d: UserData, subjectId: string): number {
 }
 
 export function upcomingAssessments(d: UserData): Assessment[] {
+  // "Upcoming" = not completed and due today or later. Past-due items (e.g. old
+  // Canvas assignments from before the app was installed) are NOT upcoming.
   return activeAssessments(d)
-    .filter((a) => a.status !== "completed" && a.dueDate)
+    .filter((a) => {
+      if (a.status === "completed" || !a.dueDate) return false;
+      const du = daysUntil(a.dueDate);
+      return du !== null && du >= 0;
+    })
+    .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
+}
+
+/** Not-completed assessments whose due date has passed (overdue / past). */
+export function pastDueAssessments(d: UserData): Assessment[] {
+  return activeAssessments(d)
+    .filter((a) => {
+      if (a.status === "completed" || !a.dueDate) return false;
+      const du = daysUntil(a.dueDate);
+      return du !== null && du < 0;
+    })
+    .sort((a, b) => (a.dueDate! > b.dueDate! ? -1 : 1));
+}
+
+/**
+ * Assessments that need a "did you finish this?" check-in: due today or recently
+ * overdue (within two weeks) and not yet completed. The window stops ancient
+ * pre-install Canvas assignments from prompting.
+ */
+export function assessmentsNeedingCheckIn(d: UserData): Assessment[] {
+  return activeAssessments(d)
+    .filter((a) => {
+      if (a.status === "completed" || !a.dueDate) return false;
+      const du = daysUntil(a.dueDate);
+      return du !== null && du <= 0 && du >= -14;
+    })
     .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
 }
 

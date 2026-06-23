@@ -3,3 +3,7 @@ node_modules
 .env
 .env.local
 .env*.local
+
+# The desktop (Electron) app is built/distributed separately — never deploy it
+# (its node_modules + dist contain >100MB binaries).
+desktop

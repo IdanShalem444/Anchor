@@ -17,8 +17,8 @@ const path = require("path");
 const APP_URL = process.env.ANCHOR_URL || "https://anchor-seven-lyart.vercel.app";
 
 let mainWindow = null;
-let widgetWindow = null;
 let tray = null;
+const widgetWindows = new Map();
 
 function trayIcon() {
   const p = path.join(__dirname, "assets", "trayTemplate.png");
@@ -74,18 +74,22 @@ function createMainWindow() {
   });
 }
 
-// A small always-on-top "widget" — a compact reminders panel.
-function toggleWidget() {
-  if (widgetWindow) {
-    widgetWindow.close();
+// Small always-on-top "widget" windows (installable mini panels). Each route
+// gets one window; clicking its tray item again just focuses it.
+function openWidget(routePath, title) {
+  const existing = widgetWindows.get(routePath);
+  if (existing) {
+    existing.show();
+    existing.focus();
     return;
   }
-  widgetWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 380,
     height: 560,
     resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    title: title || "Anchor",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     backgroundColor: "#0b1020",
     webPreferences: {
@@ -94,17 +98,18 @@ function toggleWidget() {
       nodeIntegration: false,
     },
   });
-  widgetWindow.loadURL(`${APP_URL}/school/reminders`);
-  widgetWindow.on("closed", () => {
-    widgetWindow = null;
-  });
+  win.loadURL(`${APP_URL}${routePath}`);
+  win.on("closed", () => widgetWindows.delete(routePath));
+  widgetWindows.set(routePath, win);
 }
 
 function createTray() {
   tray = new Tray(trayIcon());
   const menu = Menu.buildFromTemplate([
     { label: "Open Anchor", click: createMainWindow },
-    { label: "Reminders widget", click: toggleWidget },
+    { type: "separator" },
+    { label: "To-do widget", click: () => openWidget("/widget/todo", "To-do") },
+    { label: "Reminders widget", click: () => openWidget("/school/reminders", "Reminders") },
     { type: "separator" },
     {
       label: "Open at login",
@@ -131,6 +136,12 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", createMainWindow);
+
+  // Cmd-Q / app quit must actually quit (otherwise the close handler would just
+  // hide the window and the app would appear stuck in the tray).
+  app.on("before-quit", () => {
+    app.isQuitting = true;
+  });
 
   app.whenReady().then(() => {
     if (process.platform === "darwin") app.setName("Anchor");

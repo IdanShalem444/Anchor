@@ -16,10 +16,8 @@
   },
   "author": "Anchor",
   "license": "MIT",
-  "dependencies": {
-    "electron": "^31.7.6"
-  },
   "devDependencies": {
+    "electron": "^31.7.6",
     "electron-builder": "^24.13.3"
   },
   "build": {
@@ -28,12 +26,15 @@
     "files": ["main.js", "preload.js", "bin/**/*", "assets/**/*"],
     "mac": {
       "category": "public.app-category.education",
+      "icon": "assets/icon.png",
       "target": ["dmg", "zip"]
     },
     "win": {
+      "icon": "assets/icon.png",
       "target": ["nsis"]
     },
     "linux": {
+      "icon": "assets/icon.png",
       "target": ["AppImage"],
       "category": "Education"
     }
