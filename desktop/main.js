@@ -120,14 +120,18 @@ function openWidget(routePath, title) {
     height: b.height || 560,
     x: typeof b.x === "number" ? b.x : undefined,
     y: typeof b.y === "number" ? b.y : undefined,
-    minWidth: 240,
-    minHeight: 200,
-    resizable: true, // drag edges to resize
+    minWidth: 200,
+    minHeight: 150,
+    resizable: true, // drag any edge/corner to resize
+    movable: true, // drag the title bar to reposition
+    maximizable: true,
     alwaysOnTop: true, // stays visible over other apps
     skipTaskbar: true,
     fullscreenable: false,
     title: title || WIDGET_TITLES[routePath] || "Anchor",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    // Standard frame = a clear, draggable title bar + native resize handles on
+    // every edge. (hiddenInset left almost no grab area, so widgets felt stuck.)
+    titleBarStyle: "default",
     backgroundColor: "#0b1020",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
