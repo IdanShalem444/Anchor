@@ -43,7 +43,7 @@ gh release create v0.1.0 desktop/dist/Anchor-*-mac.zip -t "Anchor 0.1.0"
 **Them (any Mac, one line):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<you>/anchor/main/desktop/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IdanShalem444/Anchor/main/desktop/scripts/install.sh | bash
 ```
 
 That downloads Anchor, installs it to `~/Applications`, clears the Gatekeeper

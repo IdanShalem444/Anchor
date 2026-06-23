@@ -8,7 +8,7 @@
 set -euo pipefail
 
 OWNER="${ANCHOR_OWNER:-IdanShalem444}"
-REPO="${ANCHOR_REPO:-anchor}"
+REPO="${ANCHOR_REPO:-Anchor}"
 DEST="$HOME/Applications"
 
 if [ "$(uname)" != "Darwin" ]; then
