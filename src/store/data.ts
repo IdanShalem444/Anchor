@@ -13,6 +13,7 @@ import type {
   Essay,
   Flashcard,
   GeneratedContent,
+  HomeworkItem,
   MindEdge,
   MindMap,
   MindNode,
@@ -68,46 +69,13 @@ export interface CanvasImportPayload {
   }[];
 }
 
-/**
- * Canvas sends `due_at` as a UTC timestamp. Slicing the string would use the
- * UTC calendar day, which is off by one for morning deadlines in UTC+ zones
- * (e.g. a 9am Sydney due date is the previous day in UTC). Convert to the
- * user's LOCAL date so it matches what Canvas shows them.
- */
-function localDate(iso?: string | null): string | undefined {
-  if (!iso) return undefined;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return undefined;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 /** Compose an assessment notification/brief from a Canvas assignment. */
 function canvasBrief(
   a: CanvasImportPayload["assignments"][number],
   due?: string
 ): string {
   const lines: string[] = [a.name];
-  // Prefer a full local date + time so the deadline is unambiguous.
-  if (a.dueAt) {
-    const d = new Date(a.dueAt);
-    lines.push(
-      `Due: ${
-        isNaN(d.getTime())
-          ? due
-          : d.toLocaleString(undefined, {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })
-      }`
-    );
-  } else if (due) {
-    lines.push(`Due: ${due}`);
-  }
+  if (due) lines.push(`Due: ${due}`);
   if (a.points != null) lines.push(`Worth: ${a.points} marks`);
   if (a.url) lines.push(`Source: ${a.url}`);
   if (a.description && a.description.trim()) lines.push("", a.description.trim());
@@ -128,6 +96,7 @@ export interface UserData {
   notes: Note[];
   projects: Project[];
   mindmaps: MindMap[];
+  homework: HomeworkItem[];
   streak: { count: number; lastActive: string | null };
 }
 
@@ -144,6 +113,7 @@ const emptyData = (): UserData => ({
   notes: [],
   projects: [],
   mindmaps: [],
+  homework: [],
   streak: { count: 0, lastActive: null },
 });
 
@@ -230,6 +200,12 @@ interface DataState {
   createMap: (name: string) => MindMap;
   updateMap: (id: string, patch: Partial<MindMap>) => void;
   deleteMap: (id: string) => void;
+
+  // homework
+  addHomework: (h: Pick<HomeworkItem, "title"> & Partial<HomeworkItem>) => void;
+  toggleHomework: (id: string) => void;
+  updateHomework: (id: string, patch: Partial<HomeworkItem>) => void;
+  deleteHomework: (id: string) => void;
 
   seedExample: () => void;
   importFromCanvas: (payload: CanvasImportPayload) => {
@@ -642,6 +618,34 @@ export const useData = create<DataState>()(
             d.mindmaps = d.mindmaps.filter((x) => x.id !== id);
           }),
 
+        // ── homework ──────────────────────────────────────
+        addHomework: (h) =>
+          mutate((d) => {
+            if (!d.homework) d.homework = [];
+            d.homework.unshift({
+              id: uid("hw"),
+              title: h.title,
+              subjectId: h.subjectId,
+              dueDate: h.dueDate,
+              done: false,
+              createdAt: Date.now(),
+            });
+          }),
+        toggleHomework: (id) =>
+          mutate((d) => {
+            const i = (d.homework || []).findIndex((x) => x.id === id);
+            if (i >= 0) d.homework[i].done = !d.homework[i].done;
+          }),
+        updateHomework: (id, patch) =>
+          mutate((d) => {
+            const i = (d.homework || []).findIndex((x) => x.id === id);
+            if (i >= 0) d.homework[i] = { ...d.homework[i], ...patch };
+          }),
+        deleteHomework: (id) =>
+          mutate((d) => {
+            d.homework = (d.homework || []).filter((x) => x.id !== id);
+          }),
+
         seedExample: () => {
           const existing = get().data();
           if (existing.subjects.length > 0) return;
@@ -696,7 +700,7 @@ export const useData = create<DataState>()(
               .data()
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
             if (!subject) continue;
-            const due = localDate(a.dueAt);
+            const due = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
             const hasBrief = !!(a.description && a.description.trim().length > 10);
             const brief = canvasBrief(a, due);
             const notification = {

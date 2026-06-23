@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Check, RotateCcw, Bell, ChevronRight, Clock } from "lucide-react";
+import { Check, RotateCcw, Bell, ChevronRight, Clock, CalendarRange } from "lucide-react";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
@@ -140,6 +141,7 @@ function ReminderCard({ a }: { a: Assessment }) {
   const du = daysUntil(a.dueDate);
   const overdue = du !== null && du < 0;
   const soon = du !== null && du >= 0 && du <= 2;
+  const [editingDue, setEditingDue] = useState(false);
 
   return (
     <div className="flex items-stretch rounded-2xl bg-white/60 ring-1 ring-black/[0.04] transition-all hover:bg-white/90 hover:shadow-soft">
@@ -200,9 +202,29 @@ function ReminderCard({ a }: { a: Assessment }) {
         </div>
         <ChevronRight size={16} className="shrink-0 self-center text-ink-faint" />
       </Link>
+      {editingDue ? (
+        <input
+          type="date"
+          autoFocus
+          defaultValue={a.dueDate ?? ""}
+          onChange={(e) => update(a.id, { dueDate: e.target.value || undefined })}
+          onBlur={() => setEditingDue(false)}
+          className="m-2 h-9 shrink-0 rounded-xl border border-black/10 bg-white px-2 text-[12px] text-ink focus:border-anchor/40 focus:outline-none"
+          title="Set due date"
+        />
+      ) : (
+        <button
+          onClick={() => setEditingDue(true)}
+          className="m-2 grid w-10 shrink-0 place-items-center rounded-xl border border-black/10 text-ink-faint transition-colors hover:border-anchor/40 hover:text-anchor"
+          aria-label="Edit due date"
+          title="Fix the due date"
+        >
+          <CalendarRange size={16} />
+        </button>
+      )}
       <button
         onClick={() => update(a.id, { status: "completed", progress: 100 })}
-        className="m-2 grid w-10 shrink-0 place-items-center rounded-xl border border-black/10 text-ink-faint transition-colors hover:border-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-600"
+        className="my-2 mr-2 grid w-10 shrink-0 place-items-center rounded-xl border border-black/10 text-ink-faint transition-colors hover:border-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-600"
         aria-label="Mark done"
         title="Mark done"
       >
