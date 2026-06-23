@@ -140,10 +140,11 @@ function openWidget(routePath, title) {
     },
   });
 
-  // Float above normal windows and follow you across every Space / full-screen app.
+  // Float above other windows, but stay pinned to the desktop/Space it's on —
+  // it should NOT follow you when you three-finger swipe between Spaces.
   win.setAlwaysOnTop(true, "floating");
   if (win.setVisibleOnAllWorkspaces) {
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setVisibleOnAllWorkspaces(false);
   }
 
   win.loadURL(`${APP_URL}${routePath}`);
