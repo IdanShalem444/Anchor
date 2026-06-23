@@ -83,6 +83,36 @@ function stripHtml(html?: string | null): string {
     .slice(0, 6000);
 }
 
+/** Error that knows it came from Canvas (carries the HTTP status). */
+export class CanvasError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = "CanvasError";
+  }
+}
+
+/**
+ * Accept whatever the user pastes for their Canvas URL and return a clean origin:
+ *   "emanuel.instructure.com"            → "https://emanuel.instructure.com"
+ *   "https://emanuel.instructure.com/"   → "https://emanuel.instructure.com"
+ *   "https://emanuel.instructure.com/courses/123" → "https://emanuel.instructure.com"
+ * Returns "" if it can't be parsed.
+ */
+export function normalizeBaseUrl(input: string): string {
+  let s = String(input || "").trim();
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "";
+  }
+}
+
 async function cget(creds: CanvasCreds, path: string) {
   const res = await fetch(`${creds.baseUrl}/api/v1${path}`, {
     headers: { Authorization: `Bearer ${creds.token}` },
@@ -90,7 +120,7 @@ async function cget(creds: CanvasCreds, path: string) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Canvas ${res.status} on ${path}: ${body.slice(0, 200)}`);
+    throw new CanvasError(res.status, `Canvas ${res.status} on ${path}: ${body.slice(0, 200)}`);
   }
   return res.json();
 }

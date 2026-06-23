@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { syncCanvas } from "@/lib/canvas";
+import { syncCanvas, CanvasError } from "@/lib/canvas";
 import { resolveCanvasCreds } from "@/lib/canvas-creds";
 
 export const runtime = "nodejs";
@@ -17,6 +17,16 @@ export async function POST() {
   try {
     return NextResponse.json(await syncCanvas(creds));
   } catch (e) {
+    if (e instanceof CanvasError && (e.status === 401 || e.status === 403)) {
+      return NextResponse.json(
+        {
+          error:
+            "Canvas rejected your token — it has likely expired (tokens last about 120 days). Open “Manage” and reconnect with a new token.",
+          expired: true,
+        },
+        { status: 401 }
+      );
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Canvas sync failed" },
       { status: 502 }

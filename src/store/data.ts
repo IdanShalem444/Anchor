@@ -21,7 +21,6 @@ import type {
   Project,
   Quote,
   Reminder,
-  ResearchEntry,
   Resource,
   Subject,
   SubjectType,
@@ -96,10 +95,6 @@ export interface UserData {
   notes: Note[];
   projects: Project[];
   mindmaps: MindMap[];
-  /** Captured web research (in-app browser), per subject. */
-  research: ResearchEntry[];
-  /** When true, searches + viewed pages are logged for the AI to use. */
-  researchCapture: boolean;
   streak: { count: number; lastActive: string | null };
 }
 
@@ -116,8 +111,6 @@ const emptyData = (): UserData => ({
   notes: [],
   projects: [],
   mindmaps: [],
-  research: [],
-  researchCapture: false,
   streak: { count: 0, lastActive: null },
 });
 
@@ -204,11 +197,6 @@ interface DataState {
   createMap: (name: string) => MindMap;
   updateMap: (id: string, patch: Partial<MindMap>) => void;
   deleteMap: (id: string) => void;
-
-  // research (in-app browser)
-  setResearchCapture: (on: boolean) => void;
-  addResearchEntry: (e: Omit<ResearchEntry, "id" | "at">) => void;
-  clearResearch: (subjectId: string) => void;
 
   seedExample: () => void;
   importFromCanvas: (payload: CanvasImportPayload) => {
@@ -619,33 +607,6 @@ export const useData = create<DataState>()(
         deleteMap: (id) =>
           mutate((d) => {
             d.mindmaps = d.mindmaps.filter((x) => x.id !== id);
-          }),
-
-        // ── research (in-app browser) ─────────────────────
-        setResearchCapture: (on) =>
-          mutate((d) => {
-            d.researchCapture = on;
-          }),
-        addResearchEntry: (e) =>
-          mutate((d) => {
-            if (!d.researchCapture) return;
-            if (!d.research) d.research = [];
-            // De-dupe a viewed page / repeated query within the same subject.
-            d.research = d.research.filter(
-              (r) =>
-                !(
-                  r.subjectId === e.subjectId &&
-                  r.kind === e.kind &&
-                  (e.kind === "view" ? r.url === e.url : r.query === e.query)
-                )
-            );
-            d.research.unshift({ ...e, id: uid("res"), at: Date.now() });
-            // Keep the log bounded per user.
-            if (d.research.length > 200) d.research = d.research.slice(0, 200);
-          }),
-        clearResearch: (subjectId) =>
-          mutate((d) => {
-            d.research = (d.research || []).filter((r) => r.subjectId !== subjectId);
           }),
 
         seedExample: () => {

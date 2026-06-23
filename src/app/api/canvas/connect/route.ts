@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { verifyCanvas } from "@/lib/canvas";
+import { verifyCanvas, normalizeBaseUrl, CanvasError } from "@/lib/canvas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,14 +18,14 @@ export async function POST(req: Request) {
   let token = "";
   try {
     const body = await req.json();
-    baseUrl = String(body.baseUrl || "").trim().replace(/\/$/, "");
+    baseUrl = normalizeBaseUrl(body.baseUrl); // accepts bare domains / full URLs
     token = String(body.token || "").trim();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
-  if (!/^https?:\/\//.test(baseUrl) || !token) {
+  if (!baseUrl || !token) {
     return NextResponse.json(
-      { error: "Enter your Canvas URL (https://…instructure.com) and access token." },
+      { error: "Enter your Canvas URL (e.g. yourschool.instructure.com) and an access token." },
       { status: 400 }
     );
   }
@@ -34,17 +34,37 @@ export async function POST(req: Request) {
   let name = "";
   try {
     name = (await verifyCanvas({ baseUrl, token })).name;
-  } catch {
+  } catch (e) {
+    if (e instanceof CanvasError && e.status === 401) {
+      return NextResponse.json(
+        {
+          error:
+            "That token didn't work — it's invalid or has expired. Canvas tokens expire (about every 120 days), so generate a fresh one and paste it here.",
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      { error: "Couldn't connect — double-check the URL and token." },
+      { error: "Couldn't reach Canvas — double-check the URL (e.g. yourschool.instructure.com)." },
       { status: 400 }
     );
   }
 
-  const { error } = await sb
+  let { error } = await sb
     .from("profiles")
-    .update({ canvas_base_url: baseUrl, canvas_token: token })
+    .update({
+      canvas_base_url: baseUrl,
+      canvas_token: token,
+      canvas_connected_at: new Date().toISOString(),
+    })
     .eq("id", user.id);
+  // If the new column hasn't been added to the DB yet, save without it.
+  if (error && /canvas_connected_at/.test(error.message)) {
+    ({ error } = await sb
+      .from("profiles")
+      .update({ canvas_base_url: baseUrl, canvas_token: token })
+      .eq("id", user.id));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, name });

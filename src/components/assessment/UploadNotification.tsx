@@ -16,7 +16,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { useData } from "@/store/data";
-import { researchForSubject } from "@/lib/selectors";
 import { ai } from "@/lib/ai";
 import { extractText, fileToDataUrl } from "@/lib/extract";
 import { uid } from "@/lib/format";
@@ -139,20 +138,6 @@ export function UploadNotification({
           subject.outcomes
             .slice(0, 40)
             .map((o) => `- ${o.title}${o.description ? `: ${o.description}` : ""}`)
-            .join("\n")
-      );
-    }
-    // Fold in what the student researched in the in-app browser for this subject.
-    const research = researchForSubject(useData.getState().data(), subject.id).slice(0, 12);
-    if (research.length) {
-      syllabusCtx.push(
-        "Student's saved web research (use relevant facts in the notes/flashcards):\n" +
-          research
-            .map((r) =>
-              r.kind === "view"
-                ? `- ${r.title || r.url}${r.excerpt ? `: ${r.excerpt.slice(0, 600)}` : ""}`
-                : `- searched: "${r.query}"`
-            )
             .join("\n")
       );
     }

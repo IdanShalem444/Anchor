@@ -169,20 +169,6 @@ export async function chat(input: {
       ? `Course learning outcomes (syllabus): ${c.outcomes.slice(0, 30).map((o) => o.title).join("; ")}.`
       : "",
     c.syllabus ? `Course syllabus excerpt: ${c.syllabus.slice(0, 1200)}` : "",
-    c.research?.length
-      ? "Student's saved web research for this subject:\n" +
-        c.research
-          .slice(0, 12)
-          .map((r) =>
-            r.title
-              ? `• ${r.title}${r.excerpt ? `: ${r.excerpt.slice(0, 400)}` : ""}`
-              : r.query
-                ? `• searched: "${r.query}"`
-                : ""
-          )
-          .filter(Boolean)
-          .join("\n")
-      : "",
     c.notificationText ? `Notification excerpt: ${c.notificationText.slice(0, 1500)}` : "",
     assessmentList,
   ].filter(Boolean);
