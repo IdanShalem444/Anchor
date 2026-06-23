@@ -108,8 +108,18 @@ function createTray() {
   const menu = Menu.buildFromTemplate([
     { label: "Open Anchor", click: createMainWindow },
     { type: "separator" },
-    { label: "To-do widget", click: () => openWidget("/widget/todo", "To-do") },
-    { label: "Reminders widget", click: () => openWidget("/school/reminders", "Reminders") },
+    {
+      label: "Widgets",
+      submenu: [
+        { label: "To-do list", click: () => openWidget("/widget/todo", "To-do") },
+        { label: "Next up", click: () => openWidget("/widget/next", "Next up") },
+        { label: "Quick capture", click: () => openWidget("/widget/capture", "Quick capture") },
+        { label: "Focus timer", click: () => openWidget("/widget/timer", "Focus timer") },
+        { label: "Study streak", click: () => openWidget("/widget/streak", "Study streak") },
+        { type: "separator" },
+        { label: "Reminders", click: () => openWidget("/school/reminders", "Reminders") },
+      ],
+    },
     { type: "separator" },
     {
       label: "Open at login",
