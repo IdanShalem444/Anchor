@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { SupabaseBridge } from "@/components/SupabaseBridge";
+import { LiveSync } from "@/components/LiveSync";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className="min-h-dvh font-sans text-ink antialiased">
         <AuroraBackground />
         <SupabaseBridge />
+        <LiveSync />
         {children}
       </body>
     </html>

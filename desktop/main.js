@@ -10,6 +10,7 @@ const {
   Notification,
 } = require("electron");
 const path = require("path");
+const fs = require("fs");
 
 // The desktop app is a native shell around the live Anchor web app, so it always
 // runs the latest version and shares the same account/data. Override for dev with
@@ -19,6 +20,35 @@ const APP_URL = process.env.ANCHOR_URL || "https://anchor-seven-lyart.vercel.app
 let mainWindow = null;
 let tray = null;
 const widgetWindows = new Map();
+
+const WIDGET_TITLES = {
+  "/widget/todo": "To-do",
+  "/widget/next": "Next up",
+  "/widget/capture": "Quick capture",
+  "/widget/timer": "Focus timer",
+  "/widget/streak": "Study streak",
+  "/school/reminders": "Reminders",
+};
+
+// Persist each widget's size + position + open state so they come back exactly
+// where you left them (real-desktop-widget behaviour).
+function stateFile() {
+  return path.join(app.getPath("userData"), "widgets.json");
+}
+function readWidgetState() {
+  try {
+    return JSON.parse(fs.readFileSync(stateFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+function patchWidgetState(route, patch) {
+  const s = readWidgetState();
+  s[route] = { ...(s[route] || {}), ...patch };
+  try {
+    fs.writeFileSync(stateFile(), JSON.stringify(s));
+  } catch {}
+}
 
 function trayIcon() {
   const p = path.join(__dirname, "assets", "trayTemplate.png");
@@ -81,15 +111,22 @@ function openWidget(routePath, title) {
   if (existing) {
     existing.show();
     existing.focus();
-    return;
+    return existing;
   }
+  const saved = readWidgetState()[routePath] || {};
+  const b = saved.bounds || {};
   const win = new BrowserWindow({
-    width: 380,
-    height: 560,
-    resizable: true,
-    alwaysOnTop: true,
+    width: b.width || 380,
+    height: b.height || 560,
+    x: typeof b.x === "number" ? b.x : undefined,
+    y: typeof b.y === "number" ? b.y : undefined,
+    minWidth: 240,
+    minHeight: 200,
+    resizable: true, // drag edges to resize
+    alwaysOnTop: true, // stays visible over other apps
     skipTaskbar: true,
-    title: title || "Anchor",
+    fullscreenable: false,
+    title: title || WIDGET_TITLES[routePath] || "Anchor",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     backgroundColor: "#0b1020",
     webPreferences: {
@@ -98,9 +135,34 @@ function openWidget(routePath, title) {
       nodeIntegration: false,
     },
   });
+
+  // Float above normal windows and follow you across every Space / full-screen app.
+  win.setAlwaysOnTop(true, "floating");
+  if (win.setVisibleOnAllWorkspaces) {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+
   win.loadURL(`${APP_URL}${routePath}`);
+
+  const saveBounds = () => patchWidgetState(routePath, { bounds: win.getBounds(), open: true });
+  win.on("moved", saveBounds); // remember placement
+  win.on("resized", saveBounds); // remember size
+  win.on("close", () =>
+    patchWidgetState(routePath, { bounds: win.getBounds(), open: false })
+  );
   win.on("closed", () => widgetWindows.delete(routePath));
+
+  patchWidgetState(routePath, { open: true });
   widgetWindows.set(routePath, win);
+  return win;
+}
+
+// Reopen the widgets that were on screen last session.
+function restoreWidgets() {
+  const s = readWidgetState();
+  for (const route of Object.keys(s)) {
+    if (s[route] && s[route].open) openWidget(route, WIDGET_TITLES[route]);
+  }
 }
 
 function createTray() {
@@ -157,6 +219,7 @@ if (!gotLock) {
     if (process.platform === "darwin") app.setName("Anchor");
     createMainWindow();
     createTray();
+    restoreWidgets(); // bring back widgets that were on screen last time
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
