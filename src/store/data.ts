@@ -68,13 +68,46 @@ export interface CanvasImportPayload {
   }[];
 }
 
+/**
+ * Canvas sends `due_at` as a UTC timestamp. Slicing the string would use the
+ * UTC calendar day, which is off by one for morning deadlines in UTC+ zones
+ * (e.g. a 9am Sydney due date is the previous day in UTC). Convert to the
+ * user's LOCAL date so it matches what Canvas shows them.
+ */
+function localDate(iso?: string | null): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return undefined;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /** Compose an assessment notification/brief from a Canvas assignment. */
 function canvasBrief(
   a: CanvasImportPayload["assignments"][number],
   due?: string
 ): string {
   const lines: string[] = [a.name];
-  if (due) lines.push(`Due: ${due}`);
+  // Prefer a full local date + time so the deadline is unambiguous.
+  if (a.dueAt) {
+    const d = new Date(a.dueAt);
+    lines.push(
+      `Due: ${
+        isNaN(d.getTime())
+          ? due
+          : d.toLocaleString(undefined, {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+      }`
+    );
+  } else if (due) {
+    lines.push(`Due: ${due}`);
+  }
   if (a.points != null) lines.push(`Worth: ${a.points} marks`);
   if (a.url) lines.push(`Source: ${a.url}`);
   if (a.description && a.description.trim()) lines.push("", a.description.trim());
@@ -663,7 +696,7 @@ export const useData = create<DataState>()(
               .data()
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
             if (!subject) continue;
-            const due = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+            const due = localDate(a.dueAt);
             const hasBrief = !!(a.description && a.description.trim().length > 10);
             const brief = canvasBrief(a, due);
             const notification = {
