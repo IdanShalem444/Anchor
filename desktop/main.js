@@ -92,10 +92,16 @@ function createMainWindow() {
     return { action: "allow" };
   });
 
-  // Closing the window hides it to the tray instead of quitting.
+  // Closing the window hides it to the tray instead of quitting. If it's in
+  // macOS fullscreen, exit fullscreen FIRST — hiding a fullscreen window leaves
+  // an empty black Space behind.
   mainWindow.on("close", (e) => {
-    if (!app.isQuitting) {
-      e.preventDefault();
+    if (app.isQuitting) return;
+    e.preventDefault();
+    if (mainWindow.isFullScreen()) {
+      mainWindow.once("leave-full-screen", () => mainWindow.hide());
+      mainWindow.setFullScreen(false);
+    } else {
       mainWindow.hide();
     }
   });
