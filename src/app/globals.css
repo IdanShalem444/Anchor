@@ -116,3 +116,18 @@ body {
     scrollbar-width: none;
   }
 }
+
+/* Rich-text note editor */
+.note-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa1ad;
+  pointer-events: none;
+}
+.note-editor ul {
+  list-style: disc;
+  margin-left: 1.25rem;
+}
+.note-editor ol {
+  list-style: decimal;
+  margin-left: 1.25rem;
+}
