@@ -123,11 +123,43 @@ body {
   color: #9aa1ad;
   pointer-events: none;
 }
+.note-editor > *:first-child {
+  margin-top: 0;
+}
+.note-editor h1,
+.note-editor h2,
+.note-editor h3 {
+  font-weight: 600;
+  color: rgb(var(--ink));
+  line-height: 1.3;
+  margin: 1.1em 0 0.45em;
+}
+.note-editor h1 {
+  font-size: 1.35rem;
+}
+.note-editor h2 {
+  font-size: 1.2rem;
+}
+.note-editor h3 {
+  font-size: 1.05rem;
+}
+.note-editor p {
+  margin: 0.55em 0;
+}
+.note-editor ul,
+.note-editor ol {
+  margin: 0.55em 0 0.55em 1.35rem;
+}
 .note-editor ul {
   list-style: disc;
-  margin-left: 1.25rem;
 }
 .note-editor ol {
   list-style: decimal;
-  margin-left: 1.25rem;
+}
+.note-editor li {
+  margin: 0.2em 0;
+}
+.note-editor strong {
+  font-weight: 600;
+  color: rgb(var(--ink));
 }
