@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, SegmentedControl } from "@/components/ui/misc";
 import { useData } from "@/store/data";
+import { activeSubjects, subjectById } from "@/lib/selectors";
 import { useQueryParam } from "@/lib/hooks";
 import { relativeTime, formatShort } from "@/lib/format";
 import type { Note, NoteKind } from "@/lib/types";
@@ -137,10 +138,20 @@ export default function NotesPage() {
                     )}
                   >
                     <div className="flex items-center gap-1.5">
-                      {n.pinned && <Pin size={11} className="text-anchor" />}
+                      {n.pinned && <Pin size={11} className="shrink-0 text-anchor" />}
                       <span className="truncate text-[13.5px] font-medium text-ink">
                         {n.title || "Untitled"}
                       </span>
+                      {(() => {
+                        const subj = subjectById(d, n.subjectId);
+                        return subj ? (
+                          <span
+                            className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ background: subj.color }}
+                            title={subj.name}
+                          />
+                        ) : null;
+                      })()}
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-ink-muted">
                       {plain(n.body) || "No content"}
@@ -199,6 +210,7 @@ export default function NotesPage() {
 function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
   const update = useData((s) => s.updateNote);
   const trash = useData((s) => s.trashNote);
+  const subjects = useData((s) => activeSubjects(s.data()));
   const [title, setTitle] = useState(note.title);
   const [tags, setTags] = useState(note.tags.join(", "));
   const editorRef = useRef<HTMLDivElement>(null);
@@ -320,6 +332,19 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-3">
+        <select
+          value={note.subjectId ?? ""}
+          onChange={(e) => update(note.id, { subjectId: e.target.value || undefined })}
+          title="Link this note to a subject"
+          className="h-9 rounded-xl border border-black/[0.06] bg-white/70 px-2.5 text-[13px] text-ink shadow-inset focus:border-anchor/30 focus:outline-none"
+        >
+          <option value="">No subject</option>
+          {subjects.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
         <Input
           value={tags}
           spellCheck={false}

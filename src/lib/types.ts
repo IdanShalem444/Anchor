@@ -271,6 +271,8 @@ export interface Note {
   title: string;
   body: string;
   kind: NoteKind;
+  /** Optional link to a school subject. */
+  subjectId?: string;
   scheduledFor?: string;
   tags: string[];
   pinned?: boolean;
