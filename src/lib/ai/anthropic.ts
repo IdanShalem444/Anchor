@@ -178,3 +178,17 @@ export async function chat(input: {
     (ctxLines.length ? `Context:\n${ctxLines.join("\n")}` : "No assessments are linked yet — suggest they sync Canvas or add a subject.");
   return complete(system, input.messages.slice(-12), 900);
 }
+
+export async function improveNote(text: string): Promise<string> {
+  const system =
+    "You are an expert editor. Rewrite the student's notes to improve structure and clarity. " +
+    "Do NOT add new facts or change the meaning — only reorganise, fix grammar/spelling, and tighten the wording. " +
+    "Use clear sections, short paragraphs and bullet points where helpful. " +
+    "Respond with ONLY clean minimal HTML using these tags: <h3>, <p>, <ul>, <li>, <strong>, <em>, <br>. " +
+    "No markdown, no code fences, no commentary.";
+  const raw = await complete(system, [{ role: "user", content: text.slice(0, 8000) }], 2000);
+  let s = raw.trim().replace(/^```(?:html)?/i, "").replace(/```$/, "").trim();
+  const first = s.search(/<(h3|p|ul|ol|li|strong|em|br)\b/i);
+  if (first > 0) s = s.slice(first);
+  return s.trim();
+}

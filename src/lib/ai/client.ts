@@ -60,4 +60,13 @@ export class HttpAIProvider implements AIProvider {
       return fallback.chat(input);
     }
   }
+
+  async improveNote(text: string): Promise<string> {
+    try {
+      const r = await post<{ html: string }>("/api/ai/improve", { text });
+      return r.html;
+    } catch {
+      return fallback.improveNote(text);
+    }
+  }
 }

@@ -92,3 +92,21 @@ export async function chat(input: {
   }
   return mock.chat(input);
 }
+
+export async function improveNote(text: string): Promise<string> {
+  if (anthropic.enabled()) {
+    try {
+      return await anthropic.improveNote(text);
+    } catch (e) {
+      console.error("[ai] Anthropic improveNote failed:", e);
+    }
+  }
+  if (openrouter.enabled()) {
+    try {
+      return await openrouter.improveNote(text);
+    } catch (e) {
+      console.error("[ai] OpenRouter improveNote failed:", e);
+    }
+  }
+  return mock.improveNote(text);
+}

@@ -15,6 +15,8 @@ import {
   Highlighter,
   List,
   Eraser,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +24,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, SegmentedControl } from "@/components/ui/misc";
 import { useData } from "@/store/data";
+import { ai } from "@/lib/ai";
 import { activeSubjects, subjectById } from "@/lib/selectors";
 import { useQueryParam } from "@/lib/hooks";
 import { relativeTime, formatShort } from "@/lib/format";
@@ -213,9 +216,29 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
   const subjects = useData((s) => activeSubjects(s.data()));
   const [title, setTitle] = useState(note.title);
   const [tags, setTags] = useState(note.tags.join(", "));
+  const [improving, setImproving] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const setKind = (kind: NoteKind) => update(note.id, { kind });
+
+  // AI clean-up: rewrite the note for structure + clarity (returns HTML).
+  const improve = async () => {
+    const el = editorRef.current;
+    const content = (el?.innerText || "").trim();
+    if (!content || improving) return;
+    setImproving(true);
+    try {
+      const html = await ai.improveNote(content);
+      if (html && editorRef.current) {
+        editorRef.current.innerHTML = html;
+        saveBody();
+      }
+    } catch {
+      // leave the note untouched on failure
+    } finally {
+      setImproving(false);
+    }
+  };
 
   const saveBody = () => {
     if (editorRef.current) update(note.id, { body: editorRef.current.innerHTML });
@@ -318,6 +341,20 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
         <ToolBtn label="Clear formatting" onClick={() => exec("removeFormat")}>
           <Eraser size={15} />
         </ToolBtn>
+        <button
+          type="button"
+          onClick={improve}
+          disabled={improving}
+          title="Rewrite this note for clarity and structure"
+          className="ml-auto flex h-8 items-center gap-1.5 rounded-lg bg-anchor/10 px-2.5 text-[12.5px] font-medium text-anchor transition-colors hover:bg-anchor/15 disabled:opacity-50"
+        >
+          {improving ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Sparkles size={14} />
+          )}
+          {improving ? "Improving…" : "Improve with AI"}
+        </button>
       </div>
 
       <div

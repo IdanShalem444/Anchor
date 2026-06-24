@@ -602,4 +602,29 @@ export class MockAIProvider implements AIProvider {
         : "Link a subject and assessment for sharper, tailored help."
     }`;
   }
+
+  async improveNote(text: string): Promise<string> {
+    await delay(400);
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const blocks = text
+      .replace(/<[^>]+>/g, " ")
+      .split(/\n{2,}/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (blocks.length === 0) return "";
+    return blocks
+      .map((b) => {
+        const ls = b.split(/\n/).map((l) => l.trim()).filter(Boolean);
+        if (ls.length > 1 && ls.every((l) => /^[-*•]/.test(l))) {
+          return (
+            "<ul>" +
+            ls.map((l) => `<li>${esc(l.replace(/^[-*•]\s?/, ""))}</li>`).join("") +
+            "</ul>"
+          );
+        }
+        return `<p>${esc(b.replace(/\n/g, " "))}</p>`;
+      })
+      .join("");
+  }
 }

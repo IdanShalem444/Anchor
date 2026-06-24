@@ -58,4 +58,6 @@ export interface AIProvider {
     messages: { role: "user" | "assistant"; content: string }[];
     context: ChatContext;
   }): Promise<string>;
+  /** Rewrite note text for structure + clarity; returns clean minimal HTML. */
+  improveNote(text: string): Promise<string>;
 }

@@ -297,3 +297,29 @@ export async function chat(input: {
   ];
   return complete(msgs, { maxTokens: 900 });
 }
+
+export async function improveNote(text: string): Promise<string> {
+  const sys =
+    "You are an expert editor. Rewrite the student's notes to improve structure and clarity. " +
+    "Do NOT add new facts or change the meaning — only reorganise, fix grammar/spelling, and tighten the wording. " +
+    "Use clear sections, short paragraphs and bullet points where helpful. " +
+    "Respond with ONLY clean minimal HTML using these tags: <h3>, <p>, <ul>, <li>, <strong>, <em>, <br>. " +
+    "No markdown, no code fences, no commentary.";
+  const raw = await complete(
+    [
+      { role: "system", content: sys },
+      { role: "user", content: text.slice(0, 8000) },
+    ],
+    { maxTokens: 2000 }
+  );
+  return sanitizeHtml(raw);
+}
+
+/** Strip code fences / stray preamble so we keep just the HTML. */
+function sanitizeHtml(raw: string): string {
+  let s = raw.trim();
+  s = s.replace(/^```(?:html)?/i, "").replace(/```$/, "").trim();
+  const first = s.search(/<(h3|p|ul|ol|li|strong|em|br)\b/i);
+  if (first > 0) s = s.slice(first);
+  return s.trim();
+}
