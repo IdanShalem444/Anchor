@@ -56,9 +56,9 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
     "Respond with ONLY valid minified JSON (no markdown) matching this TypeScript type: " +
     `{summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
     "dueDate is ISO yyyy-mm-dd if present, else omit. 6-10 flashcards. Tailor 'extras' to the subject. " +
-    `'plan' is ordered concrete steps — ${
-      input.kind === "project" ? "how to complete and submit this project" : "a short revision sequence"
-    }.`;
+    (input.kind === "project"
+      ? "THIS IS A PROJECT/SUBMISSION. Use ALL available information (brief, marking criteria/rubric, attachments, syllabus) to BREAK IT DOWN: 'plan' is a thorough, ordered list of concrete actionable steps from understanding the task to final submission, each specific to this project and mapped to the requirements/marking criteria; 'requirements' lists exactly what to deliver."
+      : "THIS IS A TEST/EXAM. Focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics/concepts/definitions/formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule; include practice and exam-style questions in 'revision'.");
   const user = `${header(input)}\nType: ${
     input.kind === "project" ? "project/submission" : "test/exam"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;

@@ -154,11 +154,9 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
     "Respond with ONLY valid minified JSON (no markdown) matching this TypeScript type: " +
     `{summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
     "dueDate must be ISO yyyy-mm-dd if a date is present, else omit. Make notes concrete and specific to the task. 6-10 flashcards. Tailor 'extras' to the subject (e.g. formula sheet for maths, techniques for English, definitions for science, vocabulary for languages). " +
-    `'plan' is an ordered list of concrete steps — ${
-      input.kind === "project"
-        ? "for this project/submission, how to actually complete and submit it (unpack brief, research, outline, draft/build, refine against criteria, submit)"
-        : "for this test/exam, a short revision sequence"
-    }.`;
+    (input.kind === "project"
+      ? "THIS IS A PROJECT/SUBMISSION to produce. Use ALL available information (the brief, any marking criteria/rubric, attachments and syllabus) to BREAK THE PROJECT DOWN: 'plan' must be a thorough, ordered list of concrete, actionable steps from understanding the task through researching, outlining, drafting/building, refining against the marking criteria, and submitting — each step specific to THIS project. 'notes' should guide the hardest parts; 'requirements' lists exactly what must be delivered."
+      : "THIS IS A TEST/EXAM to study for. Focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics, concepts, definitions and formulae to master; 'notes' explain that content clearly; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule (what to study, in what order, with active-recall and practice); include practice and exam-style questions in 'revision'.");
   const user = `${contextHeader(input)}\nType: ${
     input.kind === "project" ? "project/submission to produce" : "test/exam to study for"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;

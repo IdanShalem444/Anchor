@@ -69,6 +69,24 @@ export function assessmentsNeedingCheckIn(d: UserData): Assessment[] {
     .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
 }
 
+/**
+ * Canvas assessments that have NO real notification/details (the teacher only
+ * gave a name, no description or attached brief) and are due in ~1–3 weeks — so
+ * we can ask the student to add the notification while there's still time.
+ */
+export function assessmentsNeedingNotification(d: UserData): Assessment[] {
+  return activeAssessments(d)
+    .filter((a) => {
+      if (!a.canvasId || a.generated || !a.dueDate) return false;
+      const du = daysUntil(a.dueDate);
+      if (du === null || du < 7 || du > 28) return false;
+      const hasDescription = !!(a.description && a.description.trim().length > 12);
+      const hasAttachedBrief = !!a.notification?.rawText?.includes("[Attached:");
+      return !hasDescription && !hasAttachedBrief;
+    })
+    .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
+}
+
 export function dueThisWeek(d: UserData): Assessment[] {
   return activeAssessments(d).filter(
     (a) => a.status !== "completed" && isThisWeek(a.dueDate)
