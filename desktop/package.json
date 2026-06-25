@@ -1,6 +1,6 @@
 {
   "name": "anchor-study-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Anchor — the desktop app. Premium study + organisation, with native reminders and a menu-bar widget.",
   "main": "main.js",
   "bin": {

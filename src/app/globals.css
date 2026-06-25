@@ -117,6 +117,11 @@ body {
   }
 }
 
+/* Rounded wordmark font (the "anchor" logotype) */
+.font-rounded {
+  font-family: var(--font-rounded), ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+}
+
 /* Rich-text note editor */
 .note-editor:empty::before {
   content: attr(data-placeholder);
