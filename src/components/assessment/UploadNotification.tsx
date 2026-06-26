@@ -55,6 +55,14 @@ export function UploadNotification({
   const hasGenerated = !!assessment.generated;
   const showCompact = hasGenerated && !editing;
 
+  // A Canvas assignment with no real details — the teacher only gave a name, no
+  // description and no attached brief. Ask the student for the notification.
+  const noCanvasDetails =
+    !!assessment.canvasId &&
+    !hasGenerated &&
+    !(assessment.description && assessment.description.trim().length > 12) &&
+    !assessment.notification?.rawText?.includes("[Attached:");
+
   useEffect(() => {
     if (!busy) return;
     const t = setInterval(() => setStep((s) => (s + 1) % STEPS.length), 900);
@@ -280,10 +288,24 @@ export function UploadNotification({
                 </div>
               </div>
 
-              {assessment.notification?.fileType === "canvas" && !hasGenerated && (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500/[0.08] px-4 py-2.5 text-[13px] text-emerald-700">
-                  <Check size={14} /> Found on Canvas — review the brief below and click generate.
+              {noCanvasDetails ? (
+                <div className="mt-4 flex items-start gap-2 rounded-2xl bg-amber-500/[0.1] px-4 py-3 text-[13px] text-amber-800">
+                  <FileType2 size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    Canvas didn&apos;t include any details for this assessment — just the
+                    name. <strong>Do you have the notification?</strong> If you have a sheet,
+                    doc or photo of it, add it above and Anchor will build proper study
+                    materials. (Generating from the name alone won&apos;t be much use.)
+                  </span>
                 </div>
+              ) : (
+                assessment.notification?.fileType === "canvas" &&
+                !hasGenerated && (
+                  <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500/[0.08] px-4 py-2.5 text-[13px] text-emerald-700">
+                    <Check size={14} /> Found on Canvas — review the brief below and click
+                    generate.
+                  </div>
+                )
               )}
 
               <div className="mt-6">

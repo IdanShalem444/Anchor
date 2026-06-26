@@ -79,7 +79,8 @@ export function assessmentsNeedingNotification(d: UserData): Assessment[] {
     .filter((a) => {
       if (!a.canvasId || a.generated || !a.dueDate) return false;
       const du = daysUntil(a.dueDate);
-      if (du === null || du < 7 || du > 28) return false;
+      // any upcoming assessment within ~5 weeks (incl. due soon), not past
+      if (du === null || du < 0 || du > 35) return false;
       const hasDescription = !!(a.description && a.description.trim().length > 12);
       const hasAttachedBrief = !!a.notification?.rawText?.includes("[Attached:");
       return !hasDescription && !hasAttachedBrief;
