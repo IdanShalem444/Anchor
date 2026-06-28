@@ -22,7 +22,28 @@ npm start
 
 Dev against a local web build: `ANCHOR_URL=http://localhost:3000 npm start`
 
-## Let other people install it from the terminal
+## Easiest install — no terminal (recommended for school Macs)
+
+Many school Macs have Terminal blocked, so the everyday way to install Anchor is
+the **.dmg**, just like any Mac app:
+
+1. Download: **https://github.com/IdanShalem444/Anchor/releases/latest/download/Anchor.dmg**
+   (always the latest version — works in any browser, no terminal).
+2. Open the downloaded `Anchor.dmg`, then **drag Anchor onto the Applications
+   folder** in the window that appears.
+3. First launch only: **right-click (or Control-click) Anchor → Open → Open**.
+   (Because the app isn't paid-Apple-notarized, double-clicking shows an
+   "unidentified developer" warning the first time; right-click → Open bypasses
+   it. After that it opens normally and auto-updates itself.)
+
+> No Terminal needed at any step. Once installed (0.1.2+), updates install
+> themselves — nobody touches Terminal again.
+>
+> **Can't install apps at all** (fully locked-down Mac)? Just use the website —
+> https://anchor-seven-lyart.vercel.app — it needs no install (you only lose the
+> desktop widgets + native reminders).
+
+## Alternative — install from the terminal
 
 This gives friends the real **Anchor.app** (proper name + icon) with one command.
 It works by downloading the latest build from your **GitHub Releases**, so you
