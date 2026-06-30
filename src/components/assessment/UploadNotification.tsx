@@ -180,6 +180,9 @@ export function UploadNotification({
       if (assessment.progress < 25) updateAssessment(assessment.id, { progress: 25 });
       if (result.summary.dueDate && !assessment.dueDate)
         updateAssessment(assessment.id, { dueDate: result.summary.dueDate });
+      // Apply the AI's own read of the type, so the workspace shows the right tools.
+      if (result.kind && result.kind !== assessment.kind)
+        updateAssessment(assessment.id, { kind: result.kind });
       if (result.plan && result.plan.length && !assessment.steps?.length)
         updateAssessment(assessment.id, {
           steps: result.plan.map((t) => ({ id: uid(), text: t, done: false })),

@@ -63,13 +63,14 @@ export async function analyze(
     "You are Anchor, an expert study assistant for school and university students. " +
     "Analyse the student's assessment notification and produce study materials. " +
     "Respond with ONLY valid minified JSON (no markdown) matching this TypeScript type: " +
-    `{summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
+    `{kind:"study"|"project",summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
+    "FIRST classify the assessment and set 'kind': 'study' = a test, exam, quiz or in-class written assessment the student SITS and must revise for; 'project' = work the student PRODUCES and submits (essay, report, presentation, video, portfolio, investigation, design). If it is genuinely BOTH (e.g. make a fact sheet AND sit a test on it), set kind to the primary one but populate BOTH 'plan' and the revision materials. " +
     "dueDate is ISO yyyy-mm-dd if present, else omit. 6-10 flashcards. Tailor 'extras' to the subject. " +
-    (input.kind === "project"
-      ? "THIS IS A PROJECT/SUBMISSION. Use ALL available information (brief, marking criteria/rubric, attachments, syllabus) to BREAK IT DOWN: 'plan' is a thorough, ordered list of concrete actionable steps from understanding the task to final submission, each specific to this project and mapped to the requirements/marking criteria; 'requirements' lists exactly what to deliver."
-      : "THIS IS A TEST/EXAM. Focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics/concepts/definitions/formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule; include practice and exam-style questions in 'revision'.");
-  const user = `${header(input)}\nType: ${
-    input.kind === "project" ? "project/submission" : "test/exam"
+    "THEN tailor the materials to that kind. " +
+    "study/exam/in-class — focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics/definitions/formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule; fill 'revision.practiceQuestions' and 'revision.examQuestions' with strong exam-realistic questions; flashcards cover the key facts. " +
+    "project — BREAK IT DOWN: use the brief, marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete actionable steps from understanding the task to final submission, mapped to the requirements/marking criteria; 'requirements' lists exactly what to deliver.";
+  const user = `${header(input)}\nCanvas's guess at the type (may be wrong — you decide): ${
+    input.kind || "unknown"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
   const raw = await complete(system, [{ role: "user", content: user }], 3000, o.pro);
   const p = parseJson<any>(raw);
@@ -80,6 +81,7 @@ export async function analyze(
   const rev = p.revision ?? {};
   if (!s.overview || notes.length === 0) throw new Error("Anthropic analyze: incomplete result");
   return {
+    kind: p.kind === "project" ? "project" : p.kind === "study" ? "study" : input.kind,
     summary: {
       overview: String(s.overview),
       requirements: asArray(s.requirements),

@@ -453,6 +453,7 @@ export class MockAIProvider implements AIProvider {
       .map((r) => `Be able to ${r.toLowerCase().replace(/^(you (will|are to) )/, "").replace(/\.$/, "")}`);
 
     return {
+      kind: input.kind,
       summary: {
         overview,
         requirements: reqs.length

@@ -161,13 +161,17 @@ export async function analyze(
     "You are Anchor, an expert study assistant for school and university students. " +
     "Analyse the student's assessment notification and produce study materials. " +
     "Respond with ONLY valid minified JSON (no markdown) matching this TypeScript type: " +
-    `{summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
-    "dueDate must be ISO yyyy-mm-dd if a date is present, else omit. Make notes concrete and specific to the task. 6-10 flashcards. Tailor 'extras' to the subject (e.g. formula sheet for maths, techniques for English, definitions for science, vocabulary for languages). " +
-    (input.kind === "project"
-      ? "THIS IS A PROJECT/SUBMISSION to produce. Use ALL available information (the brief, any marking criteria/rubric, attachments and syllabus) to BREAK THE PROJECT DOWN: 'plan' must be a thorough, ordered list of concrete, actionable steps from understanding the task through researching, outlining, drafting/building, refining against the marking criteria, and submitting — each step specific to THIS project. 'notes' should guide the hardest parts; 'requirements' lists exactly what must be delivered."
-      : "THIS IS A TEST/EXAM to study for. Focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics, concepts, definitions and formulae to master; 'notes' explain that content clearly; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule (what to study, in what order, with active-recall and practice); include practice and exam-style questions in 'revision'.");
-  const user = `${contextHeader(input)}\nType: ${
-    input.kind === "project" ? "project/submission to produce" : "test/exam to study for"
+    `{kind:"study"|"project",summary:{overview:string,requirements:string[],outcomes:string[],objectives:string[],keyConcepts:string[],dueDate?:string,weighting?:string},notes:{heading:string,body:string}[],revision:{guide:string,practiceQuestions:string[],examQuestions:string[],commonMistakes:string[],misconceptions:string[],extras:{title:string,items:string[]}[]},flashcards:{front:string,back:string}[],plan:string[]}. ` +
+    "FIRST classify the assessment from the notification and set 'kind': " +
+    "'study' = a test, exam, quiz or in-class written assessment the student SITS and must revise for; " +
+    "'project' = work the student PRODUCES and submits (essay, report, presentation, video, portfolio, investigation, design, composition). " +
+    "If it is genuinely BOTH (e.g. make a fact sheet AND then sit a test on it), set kind to the primary one but populate BOTH 'plan' and the full revision materials. " +
+    "dueDate must be ISO yyyy-mm-dd if present, else omit. 6-10 flashcards. Tailor 'extras' to the subject (formula sheet for maths, techniques for English, definitions for science, vocabulary for languages). " +
+    "THEN tailor the materials to the kind you chose:\n" +
+    "• study/exam/in-class — focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics, definitions and formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study SCHEDULE (what to study, in what order, with active recall); fill 'revision.practiceQuestions' and 'revision.examQuestions' with strong, exam-realistic questions; flashcards cover the key facts.\n" +
+    "• project — BREAK IT DOWN: use the brief, any marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete, actionable STEPS from understanding the task through researching, outlining, drafting/building and refining against the marking criteria to final submission; 'requirements' lists exactly what to deliver; 'notes' guide the hardest parts.";
+  const user = `${contextHeader(input)}\nCanvas's guess at the type (may be wrong — you decide): ${
+    input.kind || "unknown"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
   const raw = await complete(
     [
@@ -184,6 +188,7 @@ export async function analyze(
   const rev = p.revision ?? {};
   if (!s.overview || notes.length === 0) throw new Error("OpenRouter analyze: incomplete result");
   return {
+    kind: p.kind === "project" ? "project" : p.kind === "study" ? "study" : input.kind,
     summary: {
       overview: String(s.overview),
       requirements: asArray(s.requirements),

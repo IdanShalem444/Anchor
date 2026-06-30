@@ -18,6 +18,8 @@ export interface AnalyzeInput {
 }
 
 export interface AnalyzeResult {
+  /** The AI's own read of the assessment type, used to tailor + relabel it. */
+  kind?: "study" | "project";
   summary: AssessmentSummary;
   notes: StudyNote[];
   revision: RevisionHub;
