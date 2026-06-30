@@ -39,22 +39,28 @@ const appUrl = (
 const stripe = new Stripe(key);
 const live = key.startsWith("sk_live");
 
+const CURRENCY = process.env.STRIPE_CURRENCY || "aud";
 const PLANS = [
-  { name: "Anchor Basic", lookup: "anchor_basic", amount: 600 }, // $6.00 / month
-  { name: "Anchor Pro", lookup: "anchor_pro", amount: 1200 }, // $12.00 / month
+  { name: "Anchor Basic", lookup: "anchor_basic", amount: 600 }, // 6.00 / month
+  { name: "Anchor Pro", lookup: "anchor_pro", amount: 1200 }, // 12.00 / month
 ];
 
-// Reuse a price by its lookup_key if it already exists, else create product+price.
+// Reuse a price by lookup_key only if it already matches the desired currency +
+// amount; otherwise create a fresh price and TRANSFER the lookup key onto it
+// (so switching currency, e.g. USD -> AUD, just re-points the key).
 async function ensurePrice(p) {
   const existing = await stripe.prices.list({ lookup_keys: [p.lookup], active: true, limit: 1 });
-  if (existing.data[0]) return existing.data[0].id;
-  const product = await stripe.products.create({ name: p.name });
+  const cur = existing.data[0];
+  if (cur && cur.currency === CURRENCY && cur.unit_amount === p.amount) return cur.id;
+
+  const productId = cur?.product || (await stripe.products.create({ name: p.name })).id;
   const price = await stripe.prices.create({
-    product: product.id,
+    product: productId,
     unit_amount: p.amount,
-    currency: "usd",
+    currency: CURRENCY,
     recurring: { interval: "month" },
     lookup_key: p.lookup,
+    transfer_lookup_key: true,
   });
   return price.id;
 }

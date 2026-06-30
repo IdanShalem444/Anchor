@@ -39,12 +39,12 @@ export const PLANS: Record<Plan, PlanDef> = {
   basic: {
     id: "basic",
     label: "Basic",
-    price: "$6/mo",
-    aiLimit: 150,
+    price: "A$6/mo",
+    aiLimit: 75,
     subjects: 10,
     features: { noteImprover: true, canvas: true, projects: true, bestModel: false },
     perks: [
-      "150 AI generations / month",
+      "75 AI generations / month",
       "Up to 10 subjects",
       "AI note improver",
       "Canvas auto-sync",
@@ -54,12 +54,12 @@ export const PLANS: Record<Plan, PlanDef> = {
   pro: {
     id: "pro",
     label: "Pro",
-    price: "$12/mo",
-    aiLimit: 1000,
+    price: "A$12/mo",
+    aiLimit: 150,
     subjects: Infinity,
     features: { noteImprover: true, canvas: true, projects: true, bestModel: true },
     perks: [
-      "1,000 AI generations / month",
+      "150 AI generations / month",
       "Unlimited subjects",
       "Smartest AI model (best study guides)",
       "Everything in Basic",
