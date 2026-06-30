@@ -210,23 +210,28 @@ function AddAndGenerate({
   async function generateMore() {
     if (!assessment.notification?.rawText) return;
     setBusy(true);
-    const more = await ai.generateFlashcards({
-      subjectType: subject.type,
-      subjectName: subject.name,
-      assessmentTitle: assessment.title,
-      text: assessment.notification.rawText,
-      count: 6,
-    });
-    addFlashcards(
-      more.map((f) => ({
-        subjectId: subject.id,
-        assessmentId: assessment.id,
-        front: f.front,
-        back: f.back,
-        source: "ai" as const,
-      }))
-    );
-    setBusy(false);
+    try {
+      const more = await ai.generateFlashcards({
+        subjectType: subject.type,
+        subjectName: subject.name,
+        assessmentTitle: assessment.title,
+        text: assessment.notification.rawText,
+        count: 6,
+      });
+      addFlashcards(
+        more.map((f) => ({
+          subjectId: subject.id,
+          assessmentId: assessment.id,
+          front: f.front,
+          back: f.back,
+          source: "ai" as const,
+        }))
+      );
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

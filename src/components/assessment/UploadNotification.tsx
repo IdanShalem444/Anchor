@@ -186,6 +186,8 @@ export function UploadNotification({
         });
       setEditing(false);
       onGenerated?.();
+    } catch {
+      // Plan block (limit / locked) is handled by the global upgrade modal.
     } finally {
       setBusy(false);
     }

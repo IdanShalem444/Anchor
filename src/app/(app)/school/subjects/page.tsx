@@ -21,6 +21,8 @@ import {
 import { SUBJECT_ICON, SUBJECT_TAGLINE } from "@/lib/subjectMeta";
 import { useQueryParam } from "@/lib/hooks";
 import { dueThisWeek } from "@/lib/selectors";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { promptSubjectLimit } from "@/lib/billing/prompt";
 
 export default function SubjectsPage() {
   const router = useRouter();
@@ -30,14 +32,25 @@ export default function SubjectsPage() {
   const seedExample = useData((s) => s.seedExample);
   const [open, setOpen] = useState(false);
   const newFlag = useQueryParam("new");
-
-  useEffect(() => {
-    if (newFlag === "1") setOpen(true);
-  }, [newFlag]);
+  const ent = useEntitlements();
 
   const subjects = activeSubjects(d);
   const trashed = trashedSubjects(d);
   const weekDue = dueThisWeek(d);
+
+  // Gate creation on the plan's subject cap.
+  const tryOpenCreate = () => {
+    if (subjects.length >= ent.subjectLimit) promptSubjectLimit(ent.plan);
+    else setOpen(true);
+  };
+
+  useEffect(() => {
+    if (newFlag === "1") {
+      if (activeSubjects(d).length >= ent.subjectLimit) promptSubjectLimit(ent.plan);
+      else setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newFlag]);
 
   return (
     <div>
@@ -50,7 +63,7 @@ export default function SubjectsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CanvasSyncButton />
-          <Button variant="primary" onClick={() => setOpen(true)}>
+          <Button variant="primary" onClick={tryOpenCreate}>
             <Plus size={17} /> New subject
           </Button>
         </div>
@@ -64,7 +77,7 @@ export default function SubjectsPage() {
             description="Create your first subject to start uploading assessments and generating study materials."
             action={
               <div className="flex gap-2">
-                <Button variant="primary" onClick={() => setOpen(true)}>
+                <Button variant="primary" onClick={tryOpenCreate}>
                   <Plus size={16} /> Create subject
                 </Button>
                 <Button variant="secondary" onClick={seedExample}>

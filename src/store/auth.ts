@@ -30,7 +30,10 @@ interface AuthState {
   updateProfile: (patch: Partial<UserProfile>) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
   changePassword: (newPassword: string) => Promise<Result>;
-  setPlan: (plan: Plan) => void;
+  /** Start a Stripe Checkout for a paid plan (redirects on success). */
+  startCheckout: (plan: Plan) => Promise<Result>;
+  /** Open the Stripe billing portal to manage / cancel (redirects). */
+  openPortal: () => Promise<Result>;
   redeem: (codeStr: string) => Promise<Result>;
   deleteAccount: () => Promise<void>;
 
@@ -38,6 +41,9 @@ interface AuthState {
   _setSession: (profile: UserProfile, settings: UserSettings) => void;
   _clearSession: () => void;
   _markResolved: () => void;
+  /** Reflect a plan change locally (after redeem / checkout return) without a
+   *  Supabase write — the plan is set authoritatively server-side. */
+  _setPlanLocal: (plan: Plan) => void;
 }
 
 const NOT_CONFIGURED: Result = {
@@ -158,14 +164,50 @@ export const useAuth = create<AuthState>()(
         return error ? { ok: false, error: error.message } : { ok: true };
       },
 
-      setPlan: (plan) => get().updateProfile({ plan }),
+      startCheckout: async (plan) => {
+        try {
+          const r = await fetch("/api/billing/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan }),
+          });
+          const d = await r.json();
+          if (!r.ok || !d.url) return { ok: false, error: d.error || "Couldn't start checkout." };
+          window.location.href = d.url;
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Couldn't start checkout." };
+        }
+      },
+
+      openPortal: async () => {
+        try {
+          const r = await fetch("/api/billing/portal", { method: "POST" });
+          const d = await r.json();
+          if (!r.ok || !d.url) return { ok: false, error: d.error || "Couldn't open billing." };
+          window.location.href = d.url;
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "Couldn't open billing." };
+        }
+      },
 
       redeem: async (codeStr) => {
-        if (codeStr.trim().toLowerCase() === "anchor-asterisk") {
-          get().setPlan("pro");
+        const code = codeStr.trim();
+        if (!code) return { ok: false, error: "Enter a code." };
+        try {
+          const r = await fetch("/api/billing/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code }),
+          });
+          const d = await r.json();
+          if (!r.ok || !d.ok) return { ok: false, error: d.error || "Invalid code." };
+          if (d.plan) get()._setPlanLocal(d.plan);
           return { ok: true };
+        } catch {
+          return { ok: false, error: "Couldn't redeem that code." };
         }
-        return { ok: false, error: "Invalid code." };
       },
 
       deleteAccount: async () => {
@@ -187,6 +229,17 @@ export const useAuth = create<AuthState>()(
       _clearSession: () => set({ currentUserId: null }),
 
       _markResolved: () => set({ sessionResolved: true }),
+
+      _setPlanLocal: (plan) => {
+        const id = get().currentUserId;
+        if (!id || !get().users[id]) return;
+        set((s) => ({
+          users: {
+            ...s.users,
+            [id]: { ...s.users[id], profile: { ...s.users[id].profile, plan } },
+          },
+        }));
+      },
     }),
     {
       name: "anchor-auth",

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { NavBar } from "@/components/nav/NavBar";
 import { DesktopNotifier } from "@/components/DesktopNotifier";
 import { AssessmentCheckIn } from "@/components/AssessmentCheckIn";
+import { BillingHost } from "@/components/billing/BillingHost";
 import { Splash } from "@/components/Splash";
 import { useAuth, useCurrentUser } from "@/store/auth";
 import { useData } from "@/store/data";
@@ -36,6 +37,7 @@ export default function AppLayout({
       <NavBar />
       <DesktopNotifier />
       <AssessmentCheckIn />
+      <BillingHost />
       <div className="pt-[88px]">{children}</div>
     </div>
   );

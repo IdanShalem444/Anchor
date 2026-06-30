@@ -14,6 +14,8 @@ import { useData } from "@/store/data";
 import { useQueryParam } from "@/lib/hooks";
 import { SUBJECT_COLORS } from "@/lib/colors";
 import { cn } from "@/lib/cn";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { UpgradeGate } from "@/components/billing/UpgradeGate";
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -24,6 +26,7 @@ export default function ProjectsPage() {
   const [desc, setDesc] = useState("");
   const [color, setColor] = useState<string>(SUBJECT_COLORS[1]);
   const newFlag = useQueryParam("new");
+  const ent = useEntitlements();
 
   useEffect(() => {
     if (newFlag === "1") setOpen(true);
@@ -39,6 +42,9 @@ export default function ProjectsPage() {
     setOpen(false);
     router.push(`/personal/projects/${p.id}`);
   }
+
+  // Projects is a Basic+ feature.
+  if (!ent.can("projects")) return <UpgradeGate feature="projects" />;
 
   return (
     <div>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyCanvas, normalizeBaseUrl, CanvasError } from "@/lib/canvas";
+import { can, requiredPlanFor } from "@/lib/billing/plans";
+import type { Plan } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +15,16 @@ export async function POST(req: Request) {
     data: { user },
   } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+
+  // Canvas auto-sync is a Basic+ feature.
+  const { data: prof } = await sb.from("profiles").select("plan").eq("id", user.id).maybeSingle();
+  const plan = ((prof?.plan as Plan) || "free") as Plan;
+  if (!can(plan, "canvas")) {
+    return NextResponse.json(
+      { error: "feature_locked", feature: "canvas", requiredPlan: requiredPlanFor("canvas"), plan },
+      { status: 403 }
+    );
+  }
 
   let baseUrl = "";
   let token = "";

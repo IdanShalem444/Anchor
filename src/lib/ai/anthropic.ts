@@ -18,9 +18,15 @@ export function enabled() {
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-async function complete(system: string, messages: Msg[], maxTokens = 2000): Promise<string> {
+async function complete(
+  system: string,
+  messages: Msg[],
+  maxTokens = 2000,
+  pro = false
+): Promise<string> {
+  const model = pro ? process.env.ANTHROPIC_PRO_MODEL || MODEL : MODEL;
   const res = await getClient().messages.create({
-    model: MODEL,
+    model,
     max_tokens: maxTokens,
     system,
     messages,
@@ -49,7 +55,10 @@ const asArray = (v: unknown): string[] =>
 const header = (i: AnalyzeInput) =>
   `Subject: ${i.subjectName} (type: ${i.subjectType}). Assessment: "${i.assessmentTitle}".`;
 
-export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
+export async function analyze(
+  input: AnalyzeInput,
+  o: { pro?: boolean } = {}
+): Promise<AnalyzeResult> {
   const system =
     "You are Anchor, an expert study assistant for school and university students. " +
     "Analyse the student's assessment notification and produce study materials. " +
@@ -62,7 +71,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
   const user = `${header(input)}\nType: ${
     input.kind === "project" ? "project/submission" : "test/exam"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
-  const raw = await complete(system, [{ role: "user", content: user }], 3000);
+  const raw = await complete(system, [{ role: "user", content: user }], 3000, o.pro);
   const p = parseJson<any>(raw);
   const s = p.summary ?? {};
   const notes: StudyNote[] = Array.isArray(p.notes)
@@ -99,7 +108,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
 }
 
 export async function generateFlashcards(
-  input: AnalyzeInput & { count?: number }
+  input: AnalyzeInput & { count?: number },
+  o: { pro?: boolean } = {}
 ): Promise<{ front: string; back: string }[]> {
   const system =
     "You are Anchor, a study assistant. Create flashcards from the assessment. " +
@@ -108,7 +118,8 @@ export async function generateFlashcards(
   const raw = await complete(
     system,
     [{ role: "user", content: `${header(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
-    1200
+    1200,
+    o.pro
   );
   const p = parseJson<any>(raw);
   const out = (Array.isArray(p.flashcards) ? p.flashcards : [])
@@ -119,7 +130,8 @@ export async function generateFlashcards(
 }
 
 export async function generateTest(
-  input: AnalyzeInput & { difficulty: Difficulty; count?: number }
+  input: AnalyzeInput & { difficulty: Difficulty; count?: number },
+  o: { pro?: boolean } = {}
 ): Promise<{ title: string; questions: TestQuestion[] }> {
   const system =
     "You are Anchor, a study assistant. Create a practice test from the assessment. " +
@@ -128,7 +140,8 @@ export async function generateTest(
   const raw = await complete(
     system,
     [{ role: "user", content: `${header(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
-    2200
+    2200,
+    o.pro
   );
   const p = parseJson<any>(raw);
   const questions: TestQuestion[] = (Array.isArray(p.questions) ? p.questions : [])
@@ -145,10 +158,13 @@ export async function generateTest(
   return { title: String(p.title || `${input.difficulty} practice — ${input.assessmentTitle}`), questions };
 }
 
-export async function chat(input: {
-  messages: { role: "user" | "assistant"; content: string }[];
-  context: ChatContext;
-}): Promise<string> {
+export async function chat(
+  input: {
+    messages: { role: "user" | "assistant"; content: string }[];
+    context: ChatContext;
+  },
+  o: { pro?: boolean } = {}
+): Promise<string> {
   const c = input.context;
   const assessmentList = c.assessments?.length
     ? "The student's assessments (synced from Canvas) — title | due | status | grade:\n" +
@@ -177,11 +193,11 @@ export async function chat(input: {
     "You are Anchor, a friendly, expert AI study tutor. Help the student understand, plan, draft and revise. " +
     "Be concise and practical. You DO have the student's assessment schedule and grades below — answer questions about what's next, what's due, deadlines and results directly from it (relative to today's date). Never tell the student to upload their schedule; you already have it.\n\n" +
     (ctxLines.length ? `Context:\n${ctxLines.join("\n")}` : "No assessments are linked yet — suggest they sync Canvas or add a subject.");
-  return complete(system, input.messages.slice(-12), 900);
+  return complete(system, input.messages.slice(-12), 900, o.pro);
 }
 
-export async function improveNote(text: string): Promise<string> {
-  const raw = await complete(IMPROVE_SYS, [{ role: "user", content: text.slice(0, 8000) }], 2000);
+export async function improveNote(text: string, o: { pro?: boolean } = {}): Promise<string> {
+  const raw = await complete(IMPROVE_SYS, [{ role: "user", content: text.slice(0, 8000) }], 2000, o.pro);
   const out = sanitizeImprovedHtml(raw);
   if (out.length < 4) throw new Error("Anthropic improve: no usable HTML");
   return out;

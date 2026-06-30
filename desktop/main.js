@@ -98,16 +98,25 @@ function createMainWindow() {
   });
 
   // Closing the window hides it to the tray instead of quitting. If it's in
-  // macOS fullscreen, exit fullscreen FIRST — hiding a fullscreen window leaves
-  // an empty black Space behind.
+  // macOS fullscreen we must exit fullscreen FIRST and let the Space-collapse
+  // animation FULLY finish before hiding — hiding the instant
+  // `leave-full-screen` fires is too early: macOS hasn't torn down the
+  // fullscreen Space yet, so it's left behind as an empty black screen with
+  // Anchor still frontmost in the menu bar.
+  const hideToTray = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  };
   mainWindow.on("close", (e) => {
     if (app.isQuitting) return;
     e.preventDefault();
     if (mainWindow.isFullScreen()) {
-      mainWindow.once("leave-full-screen", () => mainWindow.hide());
+      mainWindow.once("leave-full-screen", () => {
+        // Wait out the ~0.5s macOS exit-fullscreen animation before hiding.
+        setTimeout(hideToTray, 600);
+      });
       mainWindow.setFullScreen(false);
     } else {
-      mainWindow.hide();
+      hideToTray();
     }
   });
   mainWindow.on("closed", () => {
@@ -333,7 +342,17 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    if (process.platform === "darwin") app.setName("Anchor");
+    if (process.platform === "darwin") {
+      app.setName("Anchor");
+      // Show the Anchor logo in the Dock even when running from source
+      // (`npm start`). In the packaged app the bundled icon is used; this just
+      // fixes the dev-mode Electron logo.
+      if (app.dock) {
+        try {
+          app.dock.setIcon(path.join(__dirname, "assets", "icon.png"));
+        } catch {}
+      }
+    }
     createMainWindow();
     createTray();
     restoreWidgets(); // bring back widgets that were on screen last time

@@ -5,6 +5,8 @@ import { RefreshCw, Link2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useData } from "@/store/data";
 import { CanvasConnectModal } from "./CanvasConnectModal";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { promptFeature } from "@/lib/billing/prompt";
 
 type Status = {
   configured: boolean;
@@ -21,6 +23,7 @@ const STATUS_CACHE = "anchor:canvasStatus";
  */
 export function CanvasSyncButton() {
   const importFromCanvas = useData((s) => s.importFromCanvas);
+  const ent = useEntitlements();
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -87,7 +90,12 @@ export function CanvasSyncButton() {
   return (
     <>
       {!status?.configured ? (
-        <Button variant="secondary" onClick={() => setConnectOpen(true)}>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            ent.can("canvas") ? setConnectOpen(true) : promptFeature("canvas", ent.plan)
+          }
+        >
           <Link2 size={15} /> Connect Canvas
         </Button>
       ) : (

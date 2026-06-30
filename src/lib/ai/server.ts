@@ -16,17 +16,20 @@ if (!anthropic.enabled() && !openrouter.enabled()) {
  * Server-side AI. Priority: Claude (Anthropic) → OpenRouter → offline generator.
  * Each tier falls through to the next on failure, so generation never blocks.
  */
-export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
+/** Per-request options. `pro` selects the stronger model tier (Pro plan). */
+type Opts = { pro?: boolean };
+
+export async function analyze(input: AnalyzeInput, o: Opts = {}): Promise<AnalyzeResult> {
   if (anthropic.enabled()) {
     try {
-      return await anthropic.analyze(input);
+      return await anthropic.analyze(input, o);
     } catch (e) {
       console.error("[ai] Anthropic analyze failed:", e);
     }
   }
   if (openrouter.enabled()) {
     try {
-      return await openrouter.analyze(input);
+      return await openrouter.analyze(input, o);
     } catch (e) {
       console.error("[ai] OpenRouter analyze failed:", e);
     }
@@ -34,17 +37,20 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
   return mock.analyzeAssessment(input);
 }
 
-export async function generateFlashcards(input: AnalyzeInput & { count?: number }) {
+export async function generateFlashcards(
+  input: AnalyzeInput & { count?: number },
+  o: Opts = {}
+) {
   if (anthropic.enabled()) {
     try {
-      return await anthropic.generateFlashcards(input);
+      return await anthropic.generateFlashcards(input, o);
     } catch (e) {
       console.error("[ai] Anthropic flashcards failed:", e);
     }
   }
   if (openrouter.enabled()) {
     try {
-      return await openrouter.generateFlashcards(input);
+      return await openrouter.generateFlashcards(input, o);
     } catch (e) {
       console.error("[ai] OpenRouter flashcards failed:", e);
     }
@@ -53,18 +59,19 @@ export async function generateFlashcards(input: AnalyzeInput & { count?: number 
 }
 
 export async function generateTest(
-  input: AnalyzeInput & { difficulty: Difficulty; count?: number }
+  input: AnalyzeInput & { difficulty: Difficulty; count?: number },
+  o: Opts = {}
 ) {
   if (anthropic.enabled()) {
     try {
-      return await anthropic.generateTest(input);
+      return await anthropic.generateTest(input, o);
     } catch (e) {
       console.error("[ai] Anthropic test failed:", e);
     }
   }
   if (openrouter.enabled()) {
     try {
-      return await openrouter.generateTest(input);
+      return await openrouter.generateTest(input, o);
     } catch (e) {
       console.error("[ai] OpenRouter test failed:", e);
     }
@@ -72,20 +79,23 @@ export async function generateTest(
   return mock.generateTest(input);
 }
 
-export async function chat(input: {
-  messages: { role: "user" | "assistant"; content: string }[];
-  context: ChatContext;
-}) {
+export async function chat(
+  input: {
+    messages: { role: "user" | "assistant"; content: string }[];
+    context: ChatContext;
+  },
+  o: Opts = {}
+) {
   if (anthropic.enabled()) {
     try {
-      return await anthropic.chat(input);
+      return await anthropic.chat(input, o);
     } catch (e) {
       console.error("[ai] Anthropic chat failed:", e);
     }
   }
   if (openrouter.enabled()) {
     try {
-      return await openrouter.chat(input);
+      return await openrouter.chat(input, o);
     } catch (e) {
       console.error("[ai] OpenRouter chat failed:", e);
     }
@@ -93,17 +103,17 @@ export async function chat(input: {
   return mock.chat(input);
 }
 
-export async function improveNote(text: string): Promise<string> {
+export async function improveNote(text: string, o: Opts = {}): Promise<string> {
   if (anthropic.enabled()) {
     try {
-      return await anthropic.improveNote(text);
+      return await anthropic.improveNote(text, o);
     } catch (e) {
       console.error("[ai] Anthropic improveNote failed:", e);
     }
   }
   if (openrouter.enabled()) {
     try {
-      return await openrouter.improveNote(text);
+      return await openrouter.improveNote(text, o);
     } catch (e) {
       console.error("[ai] OpenRouter improveNote failed:", e);
     }

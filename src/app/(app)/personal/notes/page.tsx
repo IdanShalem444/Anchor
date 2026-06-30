@@ -17,7 +17,10 @@ import {
   Eraser,
   Sparkles,
   Loader2,
+  Lock,
 } from "lucide-react";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { promptFeature } from "@/lib/billing/prompt";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -218,6 +221,8 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
   const [tags, setTags] = useState(note.tags.join(", "));
   const [improving, setImproving] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+  const ent = useEntitlements();
+  const canImprove = ent.can("noteImprover");
 
   const setKind = (kind: NoteKind) => update(note.id, { kind });
 
@@ -343,15 +348,21 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
         </ToolBtn>
         <button
           type="button"
-          onClick={improve}
+          onClick={() => (canImprove ? improve() : promptFeature("noteImprover", ent.plan))}
           disabled={improving}
-          title="Rewrite this note for clarity and structure"
+          title={
+            canImprove
+              ? "Rewrite this note for clarity and structure"
+              : "Improve with AI is a Basic feature — upgrade to unlock"
+          }
           className="ml-auto flex h-8 items-center gap-1.5 rounded-lg bg-anchor/10 px-2.5 text-[12.5px] font-medium text-anchor transition-colors hover:bg-anchor/15 disabled:opacity-50"
         >
           {improving ? (
             <Loader2 size={14} className="animate-spin" />
-          ) : (
+          ) : canImprove ? (
             <Sparkles size={14} />
+          ) : (
+            <Lock size={13} />
           )}
           {improving ? "Improving…" : "Improve with AI"}
         </button>

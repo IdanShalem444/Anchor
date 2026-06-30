@@ -24,10 +24,16 @@ export function enabled() {
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
+// Pro-tier users get a stronger model (OPENROUTER_PRO_MODEL, e.g. openai/gpt-4o)
+// tried first, falling back to the standard chain if it errors.
 async function complete(
   messages: Msg[],
-  opts: { json?: boolean; maxTokens?: number } = {}
+  opts: { json?: boolean; maxTokens?: number; pro?: boolean } = {}
 ): Promise<string> {
+  const models =
+    opts.pro && process.env.OPENROUTER_PRO_MODEL
+      ? [process.env.OPENROUTER_PRO_MODEL, ...MODELS]
+      : MODELS;
   const call = (model: string, useJson: boolean) =>
     fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
@@ -47,7 +53,7 @@ async function complete(
     });
 
   let lastErr = "no model configured";
-  for (const model of MODELS) {
+  for (const model of models) {
     try {
       let res = await call(model, !!opts.json);
       // Some models reject response_format — retry once without it.
@@ -147,7 +153,10 @@ function contextHeader(input: AnalyzeInput) {
   return `Subject: ${input.subjectName} (type: ${input.subjectType}). Assessment: "${input.assessmentTitle}".`;
 }
 
-export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
+export async function analyze(
+  input: AnalyzeInput,
+  o: { pro?: boolean } = {}
+): Promise<AnalyzeResult> {
   const sys =
     "You are Anchor, an expert study assistant for school and university students. " +
     "Analyse the student's assessment notification and produce study materials. " +
@@ -165,7 +174,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
       { role: "system", content: sys },
       { role: "user", content: user },
     ],
-    { json: true, maxTokens: 4000 }
+    { json: true, maxTokens: 4000, pro: o.pro }
   );
   const p = parseJson<any>(raw);
   const s = p.summary ?? {};
@@ -205,7 +214,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
 }
 
 export async function generateFlashcards(
-  input: AnalyzeInput & { count?: number }
+  input: AnalyzeInput & { count?: number },
+  o: { pro?: boolean } = {}
 ): Promise<{ front: string; back: string }[]> {
   const sys =
     "You are Anchor, a study assistant. Create flashcards from the assessment. " +
@@ -216,7 +226,7 @@ export async function generateFlashcards(
       { role: "system", content: sys },
       { role: "user", content: `${contextHeader(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` },
     ],
-    { json: true, maxTokens: 1200 }
+    { json: true, maxTokens: 1200, pro: o.pro }
   );
   const p = parseJson<any>(raw);
   const cards = Array.isArray(p.flashcards) ? p.flashcards : [];
@@ -228,7 +238,8 @@ export async function generateFlashcards(
 }
 
 export async function generateTest(
-  input: AnalyzeInput & { difficulty: Difficulty; count?: number }
+  input: AnalyzeInput & { difficulty: Difficulty; count?: number },
+  o: { pro?: boolean } = {}
 ): Promise<{ title: string; questions: TestQuestion[] }> {
   const sys =
     "You are Anchor, a study assistant. Create a practice test from the assessment. " +
@@ -239,7 +250,7 @@ export async function generateTest(
       { role: "system", content: sys },
       { role: "user", content: `${contextHeader(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` },
     ],
-    { json: true, maxTokens: 2200 }
+    { json: true, maxTokens: 2200, pro: o.pro }
   );
   const p = parseJson<any>(raw);
   const questions: TestQuestion[] = Array.isArray(p.questions)
@@ -256,10 +267,13 @@ export async function generateTest(
   return { title: String(p.title || `${input.difficulty} practice — ${input.assessmentTitle}`), questions };
 }
 
-export async function chat(input: {
-  messages: { role: "user" | "assistant"; content: string }[];
-  context: ChatContext;
-}): Promise<string> {
+export async function chat(
+  input: {
+    messages: { role: "user" | "assistant"; content: string }[];
+    context: ChatContext;
+  },
+  o: { pro?: boolean } = {}
+): Promise<string> {
   const c = input.context;
   const assessmentList = c.assessments?.length
     ? "The student's assessments (synced from Canvas) — title | due | status | grade:\n" +
@@ -294,16 +308,16 @@ export async function chat(input: {
     { role: "system", content: sys },
     ...input.messages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
   ];
-  return complete(msgs, { maxTokens: 900 });
+  return complete(msgs, { maxTokens: 900, pro: o.pro });
 }
 
-export async function improveNote(text: string): Promise<string> {
+export async function improveNote(text: string, o: { pro?: boolean } = {}): Promise<string> {
   const raw = await complete(
     [
       { role: "system", content: IMPROVE_SYS },
       { role: "user", content: text.slice(0, 8000) },
     ],
-    { maxTokens: 2000 }
+    { maxTokens: 2000, pro: o.pro }
   );
   const out = sanitizeImprovedHtml(raw);
   if (out.length < 4) throw new Error("OpenRouter improve: no usable HTML");

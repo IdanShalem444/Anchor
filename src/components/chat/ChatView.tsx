@@ -70,21 +70,26 @@ export function ChatView({ chatId }: { chatId: string }) {
         status: a.status,
         grade: a.result?.grade ?? (a.result?.score != null ? String(a.result.score) : null),
       }));
-    const reply = await ai.chat({
-      messages: history,
-      context: {
-        subject: subject ? { name: subject.name, type: subject.type } : undefined,
-        assessmentTitle: assessment?.title,
-        notificationText: assessment?.notification?.rawText,
-        summary: assessment?.generated?.summary,
-        today: new Date().toISOString().slice(0, 10),
-        assessments: pool,
-        syllabus: subject?.syllabus,
-        outcomes: subject?.outcomes,
-      },
-    });
-    addMessage(thread.id, { role: "assistant", content: reply });
-    setSending(false);
+    try {
+      const reply = await ai.chat({
+        messages: history,
+        context: {
+          subject: subject ? { name: subject.name, type: subject.type } : undefined,
+          assessmentTitle: assessment?.title,
+          notificationText: assessment?.notification?.rawText,
+          summary: assessment?.generated?.summary,
+          today: new Date().toISOString().slice(0, 10),
+          assessments: pool,
+          syllabus: subject?.syllabus,
+          outcomes: subject?.outcomes,
+        },
+      });
+      addMessage(thread.id, { role: "assistant", content: reply });
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
