@@ -22,7 +22,6 @@ interface AuthState {
 
   signUp: (name: string, email: string, password: string) => Promise<Result>;
   signIn: (email: string, password: string, remember: boolean) => Promise<Result>;
-  signInWithGoogle: () => Promise<Result>;
   signOut: () => void;
   requestReset: (email: string) => Promise<Result>;
   resetPassword: (newPassword: string) => Promise<Result>;
@@ -103,16 +102,6 @@ export const useAuth = create<AuthState>()(
         }
         set({ remember });
         return { ok: true };
-      },
-
-      signInWithGoogle: async () => {
-        const sb = getSupabase();
-        if (!sb) return NOT_CONFIGURED;
-        const { error } = await sb.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
-        });
-        return error ? { ok: false, error: error.message } : { ok: true };
       },
 
       signOut: () => {

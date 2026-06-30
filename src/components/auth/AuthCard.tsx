@@ -19,17 +19,6 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup" | "reset";
 
-function GoogleIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden>
-      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.3 17.7 9.5 24 9.5z" />
-      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7C43.9 38 46.5 31.8 46.5 24.5z" />
-      <path fill="#FBBC05" d="M10.4 28.3c-.5-1.4-.8-3-.8-4.3s.3-2.9.8-4.3l-7.8-6.1C.9 16.7 0 20.2 0 24s.9 7.3 2.6 10.4l7.8-6.1z" />
-      <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.3-5.7c-2 1.4-4.7 2.3-7.9 2.3-6.3 0-11.7-3.8-13.6-9.3l-7.8 6.1C6.5 42.6 14.6 48 24 48z" />
-    </svg>
-  );
-}
-
 export function AuthCard({ initialMode = "signin" }: { initialMode?: Mode }) {
   const auth = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -208,31 +197,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=…`}
               {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email reset link"}
               <ArrowRight size={17} />
             </Button>
-
-            {(mode === "signin" || mode === "signup") && (
-              <>
-                <div className="flex items-center gap-3 py-1">
-                  <div className="h-px flex-1 bg-black/[0.07]" />
-                  <span className="text-xs text-ink-faint">or</span>
-                  <div className="h-px flex-1 bg-black/[0.07]" />
-                </div>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={async () => {
-                    setError(null);
-                    const res = await auth.signInWithGoogle();
-                    if (!res.ok) setError(res.error ?? "Google sign-in failed.");
-                    // success redirects to Google, then back via /auth/callback
-                  }}
-                >
-                  <GoogleIcon />
-                  Continue with Google
-                </Button>
-              </>
-            )}
           </div>
 
           <div className="mt-5 text-center text-[13.5px] text-ink-muted">
