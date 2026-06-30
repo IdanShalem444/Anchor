@@ -182,6 +182,7 @@ export default function SubjectPage({
                               <Badge tone={r.tone === "neutral" ? "neutral" : r.tone}>
                                 {r.label}
                               </Badge>
+                              {a.submittedAt && <Badge tone="green">Submitted</Badge>}
                             </div>
                           </div>
                           <ProgressRing value={r.pct} size={42} color={a.color}>

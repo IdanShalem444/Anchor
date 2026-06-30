@@ -66,6 +66,7 @@ export interface CanvasImportPayload {
     feedback?: string[];
     gradedAt?: number | null;
     submitted?: boolean;
+    submittedAt?: number | null;
     rubric?: string;
   }[];
 }
@@ -99,6 +100,8 @@ export interface UserData {
   mindmaps: MindMap[];
   homework: HomeworkItem[];
   streak: { count: number; lastActive: string | null };
+  /** Canvas assignment ids the user deleted — never re-imported on sync. */
+  deletedCanvasIds?: number[];
 }
 
 const emptyData = (): UserData => ({
@@ -116,6 +119,7 @@ const emptyData = (): UserData => ({
   mindmaps: [],
   homework: [],
   streak: { count: 0, lastActive: null },
+  deletedCanvasIds: [],
 });
 
 /** Stable reference returned when the current user has no data bucket yet —
@@ -334,12 +338,24 @@ export const useData = create<DataState>()(
         trashAssessment: (id) =>
           mutate((d) => {
             const i = d.assessments.findIndex((x) => x.id === id);
-            if (i >= 0) d.assessments[i].deletedAt = Date.now();
+            if (i < 0) return;
+            d.assessments[i].deletedAt = Date.now();
+            // Remember Canvas-sourced deletions so a re-sync doesn't bring them back.
+            const cid = d.assessments[i].canvasId;
+            if (cid != null) {
+              if (!d.deletedCanvasIds) d.deletedCanvasIds = [];
+              if (!d.deletedCanvasIds.includes(cid)) d.deletedCanvasIds.push(cid);
+            }
           }),
         restoreAssessment: (id) =>
           mutate((d) => {
             const i = d.assessments.findIndex((x) => x.id === id);
-            if (i >= 0) d.assessments[i].deletedAt = null;
+            if (i < 0) return;
+            d.assessments[i].deletedAt = null;
+            const cid = d.assessments[i].canvasId;
+            if (cid != null && d.deletedCanvasIds) {
+              d.deletedCanvasIds = d.deletedCanvasIds.filter((x) => x !== cid);
+            }
           }),
         setNotification: (id, n) =>
           mutate((d) => {
@@ -696,7 +712,9 @@ export const useData = create<DataState>()(
             }
           }
 
+          const deletedIds = new Set(get().data().deletedCanvasIds || []);
           for (const a of payload.assignments) {
+            if (deletedIds.has(a.canvasId)) continue; // user deleted it — stay gone
             const subject = get()
               .data()
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
@@ -724,11 +742,14 @@ export const useData = create<DataState>()(
             // Graded → completed (with the result). Submitted online but not yet
             // graded → also mark completed, so handing in on Canvas clears it from
             // your reminders/check-ins. Not submitted → leave the status alone.
-            const gradePatch = result
-              ? { result, status: "completed" as const, progress: 100 }
-              : a.submitted
-              ? { status: "completed" as const, progress: 100 }
-              : {};
+            const gradePatch = {
+              ...(result
+                ? { result, status: "completed" as const, progress: 100 }
+                : a.submitted
+                ? { status: "completed" as const, progress: 100 }
+                : {}),
+              ...(a.submittedAt != null ? { submittedAt: a.submittedAt } : {}),
+            };
             const existing = get().data().assessments.find((x) => x.canvasId === a.canvasId);
             if (existing) {
               get().updateAssessment(existing.id, {

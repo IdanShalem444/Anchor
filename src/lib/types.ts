@@ -139,6 +139,8 @@ export interface Assessment {
   kind?: "study" | "project";
   /** Grade + teacher feedback synced from Canvas. */
   result?: AssessmentResult;
+  /** When the student submitted this online on Canvas (epoch ms), if they have. */
+  submittedAt?: number | null;
   /** Step-by-step breakdown for project/submission assessments. */
   steps?: AssessmentStep[];
   title: string;
