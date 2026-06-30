@@ -78,6 +78,7 @@ export function assessmentsNeedingNotification(d: UserData): Assessment[] {
   return activeAssessments(d)
     .filter((a) => {
       if (!a.canvasId || a.generated || !a.dueDate) return false;
+      if (a.status === "completed") return false; // already submitted / done
       const du = daysUntil(a.dueDate);
       // any upcoming assessment within ~5 weeks (incl. due soon), not past
       if (du === null || du < 0 || du > 35) return false;

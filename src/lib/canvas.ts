@@ -27,6 +27,11 @@ export interface CanvasAssignment {
   grade?: string | null;
   feedback?: string[];
   gradedAt?: number | null;
+  /** Whether the student has submitted this online (Canvas submitted_at is set). */
+  submitted?: boolean;
+  submittedAt?: number | null;
+  /** Past due and not submitted. */
+  missing?: boolean;
   /** Formatted marking rubric / criteria, if the assignment has one. */
   rubric?: string;
 }
@@ -198,7 +203,15 @@ export async function fetchAssignments(
 async function fetchSubmissions(creds: CanvasCreds, courseId: number) {
   const map = new Map<
     number,
-    { score: number | null; grade: string | null; feedback: string[]; gradedAt: number | null }
+    {
+      score: number | null;
+      grade: string | null;
+      feedback: string[];
+      gradedAt: number | null;
+      submitted: boolean;
+      submittedAt: number | null;
+      missing: boolean;
+    }
   >();
   try {
     const subs = await cget(
@@ -214,6 +227,10 @@ async function fetchSubmissions(creds: CanvasCreds, courseId: number) {
             ? s.submission_comments.map((c: any) => c.comment).filter(Boolean)
             : [],
           gradedAt: s.graded_at ? Date.parse(s.graded_at) : null,
+          // submitted_at is set the moment the student hands in online.
+          submitted: !!s.submitted_at,
+          submittedAt: s.submitted_at ? Date.parse(s.submitted_at) : null,
+          missing: !!s.missing,
         });
       }
     }
@@ -328,6 +345,9 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
             a.grade = g.grade;
             a.feedback = g.feedback;
             a.gradedAt = g.gradedAt;
+            a.submitted = g.submitted;
+            a.submittedAt = g.submittedAt;
+            a.missing = g.missing;
           }
         }
         assignments.push(...as);

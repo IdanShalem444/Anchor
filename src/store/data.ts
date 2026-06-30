@@ -65,6 +65,7 @@ export interface CanvasImportPayload {
     grade?: string | null;
     feedback?: string[];
     gradedAt?: number | null;
+    submitted?: boolean;
     rubric?: string;
   }[];
 }
@@ -720,8 +721,13 @@ export const useData = create<DataState>()(
                   gradedAt: a.gradedAt ?? Date.now(),
                 }
               : undefined;
+            // Graded → completed (with the result). Submitted online but not yet
+            // graded → also mark completed, so handing in on Canvas clears it from
+            // your reminders/check-ins. Not submitted → leave the status alone.
             const gradePatch = result
               ? { result, status: "completed" as const, progress: 100 }
+              : a.submitted
+              ? { status: "completed" as const, progress: 100 }
               : {};
             const existing = get().data().assessments.find((x) => x.canvasId === a.canvasId);
             if (existing) {
