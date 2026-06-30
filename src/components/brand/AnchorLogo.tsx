@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-/** The Anchor mark — radiating right-facing ripple arcs + centre dot, in coral. */
+/** The Anchor mark — three radiating right-facing ripple arcs, in coral. */
 export function AnchorMark({
   className,
   size = 24,
@@ -15,17 +15,16 @@ export function AnchorMark({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.2}
+      strokeWidth={2.3}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn("text-anchor", className)}
       aria-hidden="true"
     >
-      {/* ripple emanating to the right, with the source dot on the left */}
-      <circle cx="4.5" cy="12" r="1.7" fill="currentColor" stroke="none" />
-      <path d="M4.5 8.5 A3.5 3.5 0 0 1 4.5 15.5" />
-      <path d="M4.5 5 A7 7 0 0 1 4.5 19" />
-      <path d="M4.5 1.5 A10.5 10.5 0 0 1 4.5 22.5" />
+      {/* concentric ripple arcs emanating to the right */}
+      <path d="M6 8.5 A3.5 3.5 0 0 1 6 15.5" />
+      <path d="M6 5 A7 7 0 0 1 6 19" />
+      <path d="M6 1.5 A10.5 10.5 0 0 1 6 22.5" />
     </svg>
   );
 }
