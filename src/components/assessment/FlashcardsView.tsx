@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -10,6 +10,9 @@ import {
   Trash2,
   Sparkles,
   Layers,
+  Play,
+  Pause,
+  TimerReset,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -76,6 +79,16 @@ function StudyMode({ cards }: { cards: Flashcard[] }) {
   const [pos, setPos] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
+  // Rehearsal timer — time yourself flipping through cue cards / a talk.
+  const [seconds, setSeconds] = useState(0);
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
   const idx = order[Math.min(pos, order.length - 1)] ?? 0;
   const card = cards[idx];
   const known = cards.filter((c) => c.known).length;
@@ -98,7 +111,29 @@ function StudyMode({ cards }: { cards: Flashcard[] }) {
         <span>
           Card {pos + 1} of {cards.length}
         </span>
-        <span>{known} mastered</span>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2 py-1 tabular-nums">
+            <button
+              onClick={() => setRunning((r) => !r)}
+              className="text-ink-soft hover:text-ink"
+              title={running ? "Pause" : "Rehearse — start the timer"}
+            >
+              {running ? <Pause size={13} /> : <Play size={13} />}
+            </button>
+            <span className="font-medium text-ink">{clock}</span>
+            <button
+              onClick={() => {
+                setSeconds(0);
+                setRunning(false);
+              }}
+              className="text-ink-faint hover:text-ink"
+              title="Reset timer"
+            >
+              <TimerReset size={13} />
+            </button>
+          </div>
+          <span>{known} mastered</span>
+        </div>
       </div>
       <ProgressBar value={(known / cards.length) * 100} className="mb-4" />
       <div className="relative h-64 [perspective:1600px]">
