@@ -52,24 +52,33 @@ async function complete(
       }),
     });
 
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const ATTEMPTS = 3; // per model — ride out transient 429s / timeouts / blips
   let lastErr = "no model configured";
   for (const model of models) {
-    try {
-      let res = await call(model, !!opts.json);
-      // Some models reject response_format — retry once without it.
-      if (!res.ok && opts.json) res = await call(model, false);
-      if (res.ok) {
-        const data = await res.json();
-        const content = data?.choices?.[0]?.message?.content;
-        if (typeof content === "string" && content.trim()) return content;
-        lastErr = `${model}: empty response`;
-        continue;
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      try {
+        let res = await call(model, !!opts.json);
+        // Some models reject response_format — retry once without it.
+        if (!res.ok && opts.json) res = await call(model, false);
+        if (res.ok) {
+          const data = await res.json();
+          const content = data?.choices?.[0]?.message?.content;
+          if (typeof content === "string" && content.trim()) return content;
+          lastErr = `${model}: empty response`;
+          // empty → retry (transient)
+        } else {
+          const body = await res.text().catch(() => "");
+          lastErr = `${model} ${res.status}: ${body.slice(0, 160)}`;
+          // 4xx other than 429 (bad slug, auth, quota) won't fix on retry —
+          // move to the next model immediately.
+          if (res.status !== 429 && res.status < 500) break;
+        }
+      } catch (e) {
+        // network / timeout — retry
+        lastErr = `${model}: ${e instanceof Error ? e.message : String(e)}`;
       }
-      const body = await res.text().catch(() => "");
-      lastErr = `${model} ${res.status}: ${body.slice(0, 160)}`;
-      // 429 / 5xx / bad-slug → fall through to the next model.
-    } catch (e) {
-      lastErr = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+      if (attempt < ATTEMPTS - 1) await sleep(500 * (attempt + 1)); // 0.5s, 1s backoff
     }
   }
   throw new Error(`OpenRouter — all models failed. Last: ${lastErr}`);

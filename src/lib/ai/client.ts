@@ -3,7 +3,7 @@
 import { MockAIProvider } from "./mock";
 import type { AIProvider, AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
 import type { Difficulty, TestQuestion } from "@/lib/types";
-import { emitUsage, emitBlock, type EntitlementBlock } from "@/lib/billing/signals";
+import { emitUsage, emitBlock, emitOffline, type EntitlementBlock } from "@/lib/billing/signals";
 
 const fallback = new MockAIProvider();
 
@@ -69,6 +69,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 const rethrowIfBlocked = (e: unknown) => {
   if (e instanceof AiBlockedError) throw e;
+  // Not a plan block → we're about to use the offline generator. Let the UI know.
+  emitOffline();
 };
 
 /**

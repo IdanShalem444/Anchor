@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TriangleAlert } from "lucide-react";
-import { onBlock, onUsage, type EntitlementBlock } from "@/lib/billing/signals";
+import { onBlock, onUsage, onOffline, type EntitlementBlock } from "@/lib/billing/signals";
 import { UpgradeModal } from "./UpgradeModal";
 
 // Global billing host: shows the upgrade modal on plan blocks (limit reached /
@@ -26,9 +26,17 @@ export function BillingHost() {
     []
   );
 
+  useEffect(
+    () =>
+      onOffline(() =>
+        setToast("AI was busy — showing an offline draft. Regenerate in a moment for the full model.")
+      ),
+    []
+  );
+
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000);
+    const t = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(t);
   }, [toast]);
 

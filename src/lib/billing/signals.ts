@@ -30,3 +30,15 @@ export function onBlock(fn: BlockFn): () => void {
 export function emitBlock(b: EntitlementBlock): void {
   blockSubs.forEach((f) => f(b));
 }
+
+// Fired when an AI call fell back to the offline generator (AI unreachable) —
+// so the UI can tell the user the output isn't from the real model.
+type VoidFn = () => void;
+const offlineSubs = new Set<VoidFn>();
+export function onOffline(fn: VoidFn): () => void {
+  offlineSubs.add(fn);
+  return () => void offlineSubs.delete(fn);
+}
+export function emitOffline(): void {
+  offlineSubs.forEach((f) => f());
+}
