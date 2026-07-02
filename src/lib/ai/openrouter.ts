@@ -28,15 +28,17 @@ type Msg = { role: "system" | "user" | "assistant"; content: string };
 // tried first, falling back to the standard chain if it errors.
 async function complete(
   messages: Msg[],
-  opts: { json?: boolean; maxTokens?: number; pro?: boolean } = {}
+  opts: { json?: boolean; maxTokens?: number; pro?: boolean; timeoutMs?: number } = {}
 ): Promise<string> {
   const models =
     opts.pro && process.env.OPENROUTER_PRO_MODEL
       ? [process.env.OPENROUTER_PRO_MODEL, ...MODELS]
       : MODELS;
-  const call = (model: string, useJson: boolean) =>
+  const maxTokens = opts.maxTokens ?? 2000;
+  const call = (model: string, useJson: boolean, signal: AbortSignal) =>
     fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -47,20 +49,32 @@ async function complete(
         model,
         messages,
         temperature: 0.4,
-        max_tokens: opts.maxTokens ?? 2000,
+        max_tokens: maxTokens,
         ...(useJson ? { response_format: { type: "json_object" } } : {}),
       }),
     });
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const ATTEMPTS = 3; // per model — ride out transient 429s / timeouts / blips
+  // Serverless functions are hard-capped (60s on Vercel Hobby). Stay comfortably
+  // under it and abort a slow generation ourselves, so the route returns a clean
+  // offline fallback (+ toast) instead of the platform 504-ing with nothing.
+  const perAttemptMs = opts.timeoutMs ?? 30000;
+  const deadline = Date.now() + 52000;
   let lastErr = "no model configured";
   for (const model of models) {
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 1500) {
+        lastErr = `${model}: ran out of time budget`;
+        break;
+      }
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), Math.min(perAttemptMs, remaining));
       try {
-        let res = await call(model, !!opts.json);
+        let res = await call(model, !!opts.json, ac.signal);
         // Some models reject response_format — retry once without it.
-        if (!res.ok && opts.json) res = await call(model, false);
+        if (!res.ok && opts.json) res = await call(model, false, ac.signal);
         if (res.ok) {
           const data = await res.json();
           const content = data?.choices?.[0]?.message?.content;
@@ -75,11 +89,19 @@ async function complete(
           if (res.status !== 429 && res.status < 500) break;
         }
       } catch (e) {
-        // network / timeout — retry
-        lastErr = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+        // abort (our timeout) / network — retry if budget remains
+        const aborted = e instanceof Error && e.name === "AbortError";
+        lastErr = aborted
+          ? `${model}: timed out`
+          : `${model}: ${e instanceof Error ? e.message : String(e)}`;
+      } finally {
+        clearTimeout(timer);
       }
-      if (attempt < ATTEMPTS - 1) await sleep(500 * (attempt + 1)); // 0.5s, 1s backoff
+      if (attempt < ATTEMPTS - 1 && deadline - Date.now() > 2000) {
+        await sleep(500 * (attempt + 1)); // 0.5s, 1s backoff
+      }
     }
+    if (deadline - Date.now() <= 1500) break;
   }
   throw new Error(`OpenRouter — all models failed. Last: ${lastErr}`);
 }
@@ -179,7 +201,8 @@ export async function analyze(
     "CRITICAL: 'overview', 'keyConcepts', 'requirements' and flashcards must describe the ACTUAL subject matter and task (e.g. building a full-stack web app, the SRS document, HTML/CSS/JS separation) — NEVER admin/instruction words like submit, criterion, complete, minimal, weighting, due, worth, stage or canvas. If the notification is mostly logistics with little real content, keep these short rather than inventing junk. " +
     "THEN tailor the materials to the kind you chose:\n" +
     "• study/exam/in-class — focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics, definitions and formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study SCHEDULE (what to study, in what order, with active recall); fill 'revision.practiceQuestions' and 'revision.examQuestions' with strong, exam-realistic questions; give 6-10 flashcards covering the key facts.\n" +
-    "• project — BREAK IT DOWN: use the brief, any marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete, actionable STEPS from understanding the task through researching, outlining, drafting/building and refining against the marking criteria to final submission; 'requirements' lists exactly what to deliver; 'notes' guide the hardest parts. A project is PRODUCED, not memorised, so DO NOT invent study aids: return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory (oral presentation, viva, speech, or a knowledge/test component). If it is a PRESENTATION/oral: make the flashcards CUE CARDS (front = a slide/section title or a question the audience or marker might ask; back = concise talking points to say ALOUD in your own words, NOT paragraphs), set 'revision.guide' to a concrete plan to MEMORISE and REHEARSE the talk (chunk it section by section, practise each part out loud, time yourself against the limit, and tips for confident delivery and handling questions), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content.";
+    "• project — BREAK IT DOWN: use the brief, any marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete, actionable STEPS from understanding the task through researching, outlining, drafting/building and refining against the marking criteria to final submission; 'requirements' lists exactly what to deliver; 'notes' guide the hardest parts. A project is PRODUCED, not memorised, so DO NOT invent study aids: return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory (oral presentation, viva, speech, or a knowledge/test component). If it is a PRESENTATION/oral: make the flashcards CUE CARDS (front = a slide/section title or a question the audience or marker might ask; back = concise talking points to say ALOUD in your own words, NOT paragraphs), set 'revision.guide' to a concrete plan to MEMORISE and REHEARSE the talk (chunk it section by section, practise each part out loud, time yourself against the limit, and tips for confident delivery and handling questions), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content." +
+    " Keep EVERY field concise so the JSON is COMPLETE and valid — a truncated response is useless, so never run long. Hard limits: overview ≤ 3 sentences; ≤ 4 notes (each 2–4 sentences); ≤ 8 flashcards; ≤ 6 practiceQuestions; ≤ 4 examQuestions; commonMistakes + misconceptions ≤ 4 items total; ≤ 2 revision.extras groups; plan ≤ 12 steps. Always prefer briefly completing ALL fields over long prose in any one.";
   const user = `${contextHeader(input)}\nCanvas's guess at the type (may be wrong — you decide): ${
     input.kind || "unknown"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
@@ -188,7 +211,7 @@ export async function analyze(
       { role: "system", content: sys },
       { role: "user", content: user },
     ],
-    { json: true, maxTokens: 4000, pro: o.pro }
+    { json: true, maxTokens: 2800, pro: o.pro }
   );
   const p = parseJson<any>(raw);
   const s = p.summary ?? {};
