@@ -7,15 +7,20 @@ const BASE_URL =
   process.env.OPENROUTER_BASE_URL?.replace(/\/$/, "") ||
   "https://openrouter.ai/api/v1";
 
-// Primary model + optional comma-separated fallbacks. Free models are often
-// rate-limited individually, so we try them in order until one responds — this
-// keeps real AI working for all users without paid credit.
+// Primary model + optional comma-separated fallbacks, then a hardcoded paid
+// safety net. ":free" models are excluded outright — they're slow, heavily
+// rate-limited and low quality, so falling onto one burns the request's whole
+// time budget and lands the user on the offline mock anyway.
 const MODELS = [
-  process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
-  ...(process.env.OPENROUTER_FALLBACK_MODELS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
+  ...new Set(
+    [
+      process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+      ...(process.env.OPENROUTER_FALLBACK_MODELS || "").split(","),
+      "openai/gpt-4.1-mini", // paid fallback of last resort
+    ]
+      .map((s) => s.trim())
+      .filter((s) => s && !s.endsWith(":free"))
+  ),
 ];
 
 export function enabled() {
@@ -59,7 +64,9 @@ async function complete(
   // Serverless functions are hard-capped (60s on Vercel Hobby). Stay comfortably
   // under it and abort a slow generation ourselves, so the route returns a clean
   // offline fallback (+ toast) instead of the platform 504-ing with nothing.
-  const perAttemptMs = opts.timeoutMs ?? 30000;
+  // 40s per attempt: a slow-but-successful gpt-4o-mini generation (~35s) must
+  // FINISH, not get aborted at the finish line and retried into the mock.
+  const perAttemptMs = opts.timeoutMs ?? 40000;
   const deadline = Date.now() + 52000;
   let lastErr = "no model configured";
   for (const model of models) {
