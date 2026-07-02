@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { analyze } from "@/lib/ai/server";
+import { analyze, type OfflineReport } from "@/lib/ai/server";
 import { aiGuard, withUsage } from "@/lib/billing/guard";
 
 export const runtime = "nodejs";
@@ -11,8 +11,9 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
   try {
     const input = await req.json();
-    const result = await analyze(input, { pro: gate.pro });
-    return withUsage(result, gate.usage);
+    const report: OfflineReport = {};
+    const result = await analyze(input, { pro: gate.pro, report });
+    return withUsage(result, gate.usage, report.offline);
   } catch (e) {
     return NextResponse.json({ error: "analyze failed" }, { status: 500 });
   }

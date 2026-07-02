@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { improveNote } from "@/lib/ai/server";
+import { improveNote, type OfflineReport } from "@/lib/ai/server";
 import { aiGuard, withUsage } from "@/lib/billing/guard";
 
 export const runtime = "nodejs";
@@ -14,8 +14,9 @@ export async function POST(req: Request) {
     const { text } = await req.json();
     if (!text || typeof text !== "string")
       return NextResponse.json({ error: "Missing text" }, { status: 400 });
-    const html = await improveNote(text, { pro: gate.pro });
-    return withUsage({ html }, gate.usage);
+    const report: OfflineReport = {};
+    const html = await improveNote(text, { pro: gate.pro, report });
+    return withUsage({ html }, gate.usage, report.offline);
   } catch (e) {
     return NextResponse.json({ error: "improve failed" }, { status: 500 });
   }

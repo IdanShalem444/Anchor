@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateFlashcards } from "@/lib/ai/server";
+import { generateFlashcards, type OfflineReport } from "@/lib/ai/server";
 import { aiGuard, withUsage } from "@/lib/billing/guard";
 
 export const runtime = "nodejs";
@@ -11,8 +11,9 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
   try {
     const input = await req.json();
-    const result = await generateFlashcards(input, { pro: gate.pro });
-    return withUsage(result, gate.usage);
+    const report: OfflineReport = {};
+    const result = await generateFlashcards(input, { pro: gate.pro, report });
+    return withUsage(result, gate.usage, report.offline);
   } catch (e) {
     return NextResponse.json({ error: "flashcards failed" }, { status: 500 });
   }

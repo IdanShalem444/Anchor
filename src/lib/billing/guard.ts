@@ -99,9 +99,13 @@ export async function aiGuard(opts?: {
 }
 
 /** Attach the current usage to a successful JSON response (read by the client
- *  to show the "approaching your limit" warning). */
-export function withUsage<T>(body: T, usage: Usage): NextResponse {
+ *  to show the "approaching your limit" warning). When `offline` is set, the
+ *  body is offline-mock output (all real providers failed) — flag it so the
+ *  client can tell the user it isn't the real model instead of silently
+ *  passing it off as a genuine answer. */
+export function withUsage<T>(body: T, usage: Usage, offline?: boolean): NextResponse {
   const res = NextResponse.json(body as Record<string, unknown>);
   res.headers.set("x-anchor-usage", JSON.stringify(usage));
+  if (offline) res.headers.set("x-anchor-offline", "1");
   return res;
 }

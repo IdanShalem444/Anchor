@@ -64,6 +64,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       /* ignore malformed header */
     }
   }
+  // Server responded 200 but had to fall back to the offline generator (all
+  // real AI providers failed). The output is a draft, not the real model — tell
+  // the user so it never silently passes as a genuine answer.
+  if (res.headers.get("x-anchor-offline") === "1") emitOffline();
   return (await res.json()) as T;
 }
 
