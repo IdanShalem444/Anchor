@@ -95,7 +95,7 @@ export class HttpAIProvider implements AIProvider {
     }
   }
 
-  async generateFlashcards(input: AnalyzeInput & { count?: number }) {
+  async generateFlashcards(input: AnalyzeInput & { count?: number; style?: "cuecards" }) {
     try {
       return await post<{ front: string; back: string }[]>("/api/ai/flashcards", input);
     } catch (e) {

@@ -54,7 +54,7 @@ export interface AIProvider {
     input: AnalyzeInput & { difficulty: Difficulty; count?: number }
   ): Promise<{ title: string; questions: TestQuestion[] }>;
   generateFlashcards(
-    input: AnalyzeInput & { count?: number }
+    input: AnalyzeInput & { count?: number; style?: "cuecards" }
   ): Promise<{ front: string; back: string }[]>;
   chat(input: {
     messages: { role: "user" | "assistant"; content: string }[];

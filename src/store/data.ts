@@ -155,6 +155,11 @@ interface DataState {
 
   // flashcards
   addFlashcards: (cards: Omit<Flashcard, "id" | "createdAt" | "known">[]) => void;
+  /** Swap out the AI-generated cards for an assessment (manual cards survive). */
+  replaceAiFlashcards: (
+    assessmentId: string,
+    cards: Omit<Flashcard, "id" | "createdAt" | "known">[]
+  ) => void;
   addFlashcard: (c: Omit<Flashcard, "id" | "createdAt" | "known">) => void;
   updateFlashcard: (id: string, patch: Partial<Flashcard>) => void;
   deleteFlashcard: (id: string) => void;
@@ -380,6 +385,19 @@ export const useData = create<DataState>()(
         // ── flashcards ────────────────────────────────────
         addFlashcards: (cards) =>
           mutate((d) => {
+            for (const c of cards)
+              d.flashcards.push({
+                ...c,
+                id: uid("fc"),
+                createdAt: Date.now(),
+                known: false,
+              });
+          }),
+        replaceAiFlashcards: (assessmentId, cards) =>
+          mutate((d) => {
+            d.flashcards = d.flashcards.filter(
+              (c) => !(c.assessmentId === assessmentId && c.source === "ai")
+            );
             for (const c of cards)
               d.flashcards.push({
                 ...c,

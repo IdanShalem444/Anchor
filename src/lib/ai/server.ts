@@ -59,7 +59,7 @@ export async function analyze(input: AnalyzeInput, o: Opts = {}): Promise<Analyz
 }
 
 export async function generateFlashcards(
-  input: AnalyzeInput & { count?: number },
+  input: AnalyzeInput & { count?: number; style?: "cuecards" },
   o: Opts = {}
 ) {
   let reason = "no AI provider configured";

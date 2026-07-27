@@ -208,7 +208,7 @@ export async function analyze(
     "CRITICAL: 'overview', 'keyConcepts', 'requirements' and flashcards must describe the ACTUAL subject matter and task (e.g. building a full-stack web app, the SRS document, HTML/CSS/JS separation) — NEVER admin/instruction words like submit, criterion, complete, minimal, weighting, due, worth, stage or canvas. If the notification is mostly logistics with little real content, keep these short rather than inventing junk. " +
     "THEN tailor the materials to the kind you chose:\n" +
     "• study/exam/in-class — focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics, definitions and formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study SCHEDULE (what to study, in what order, with active recall); fill 'revision.practiceQuestions' and 'revision.examQuestions' with strong, exam-realistic questions; give 6-10 flashcards covering the key facts.\n" +
-    "• project — BREAK IT DOWN: use the brief, any marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete, actionable STEPS from understanding the task through researching, outlining, drafting/building and refining against the marking criteria to final submission; 'requirements' lists exactly what to deliver; 'notes' guide the hardest parts. A project is PRODUCED, not memorised, so DO NOT invent study aids: return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory (oral presentation, viva, speech, or a knowledge/test component). If it is a PRESENTATION/oral: make the flashcards CUE CARDS (front = a slide/section title or a question the audience or marker might ask; back = concise talking points to say ALOUD in your own words, NOT paragraphs), set 'revision.guide' to a concrete plan to MEMORISE and REHEARSE the talk (chunk it section by section, practise each part out loud, time yourself against the limit, and tips for confident delivery and handling questions), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content." +
+    "• project — BREAK IT DOWN: use the brief, any marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete, actionable STEPS from understanding the task through researching, outlining, drafting/building and refining against the marking criteria to final submission; 'requirements' lists exactly what to deliver; 'notes' guide the hardest parts. A project is PRODUCED, not memorised, so DO NOT invent study aids: return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory (oral presentation, viva, speech, or a knowledge/test component). If it is a PRESENTATION/oral: cue cards can only be made from the student's OWN drafted talk, and the notification usually only DESCRIBES the task — in that case return flashcards:[] (NEVER invent cards about the task description or generic topic questions; the app lets the student paste their draft later to make real cue cards) and end 'plan' with: draft the talk, turn the draft into cue cards, rehearse with them. Only if the notification itself contains the actual content to be presented may you make the flashcards CUE CARDS from it (front = a slide/section title or a question the audience or marker might ask; back = concise talking points to say ALOUD in your own words, NOT paragraphs). Always set 'revision.guide' to a concrete plan to MEMORISE and REHEARSE the talk (chunk it section by section, practise each part out loud, time yourself against the limit, and tips for confident delivery and handling questions), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content." +
     " Keep EVERY field concise so the JSON is COMPLETE and valid — a truncated response is useless, so never run long. Hard limits: overview ≤ 3 sentences; ≤ 4 notes (each 2–4 sentences); ≤ 8 flashcards; ≤ 6 practiceQuestions; ≤ 4 examQuestions; commonMistakes + misconceptions ≤ 4 items total; ≤ 2 revision.extras groups; plan ≤ 12 steps. Always prefer briefly completing ALL fields over long prose in any one.";
   const user = `${contextHeader(input)}\nCanvas's guess at the type (may be wrong — you decide): ${
     input.kind || "unknown"
@@ -259,17 +259,25 @@ export async function analyze(
 }
 
 export async function generateFlashcards(
-  input: AnalyzeInput & { count?: number },
+  input: AnalyzeInput & { count?: number; style?: "cuecards" },
   o: { pro?: boolean } = {}
 ): Promise<{ front: string; back: string }[]> {
   const sys =
-    "You are Anchor, a study assistant. Create flashcards from the assessment. " +
-    'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
-    `Make ${input.count ?? 8} focused cards.`;
+    input.style === "cuecards"
+      ? "You are Anchor, a presentation coach. Convert the student's OWN drafted talk/script/outline into spoken cue cards, in the draft's own order. " +
+        'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
+        "front = the section/slide title, or the question that part of the talk answers. " +
+        "back = 2-4 short talking points in natural spoken language (separate points with \\n) — just enough to jog memory while presenting, NEVER full sentences to read out word-for-word. " +
+        "Use only what is in the draft; do not invent new content. " +
+        `Make up to ${input.count ?? 8} cards (fewer if the draft is short).`
+      : "You are Anchor, a study assistant. Create flashcards from the assessment. " +
+        'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
+        `Make ${input.count ?? 8} focused cards.`;
+  const label = input.style === "cuecards" ? "The student's drafted talk" : "Content";
   const raw = await complete(
     [
       { role: "system", content: sys },
-      { role: "user", content: `${contextHeader(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` },
+      { role: "user", content: `${contextHeader(input)}\n\n${label}:\n"""\n${input.text.slice(0, 6000)}\n"""` },
     ],
     { json: true, maxTokens: 1200, pro: o.pro }
   );

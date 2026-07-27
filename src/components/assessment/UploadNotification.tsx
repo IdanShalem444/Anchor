@@ -40,7 +40,7 @@ export function UploadNotification({
 }) {
   const setNotification = useData((s) => s.setNotification);
   const setGenerated = useData((s) => s.setGenerated);
-  const addFlashcards = useData((s) => s.addFlashcards);
+  const replaceAiFlashcards = useData((s) => s.replaceAiFlashcards);
   const updateAssessment = useData((s) => s.updateAssessment);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -167,8 +167,11 @@ export function UploadNotification({
         generatedAt: Date.now(),
         model: ai.name,
       });
-      // replace AI flashcards for this assessment
-      addFlashcards(
+      // Replace this assessment's AI flashcards with the new set (drops stale
+      // ones when a regenerate returns fewer — or none, e.g. an unwritten
+      // presentation). Manual cards survive.
+      replaceAiFlashcards(
+        assessment.id,
         result.flashcards.map((f) => ({
           subjectId: subject.id,
           assessmentId: assessment.id,

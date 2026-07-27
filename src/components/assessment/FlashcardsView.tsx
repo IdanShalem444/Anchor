@@ -31,14 +31,17 @@ export function FlashcardsView({
   assessment?: Assessment;
 }) {
   const [mode, setMode] = useState<"study" | "manage">("study");
+  const isProject = (assessment?.kind ?? "study") === "project";
 
   if (cards.length === 0) {
     return (
       <EmptyState
         icon={Layers}
-        title="No flashcards yet"
+        title={isProject ? "No cue cards yet" : "No flashcards yet"}
         description={
-          assessment
+          isProject
+            ? "Write your talk first — then paste the draft here and Anchor turns it into spoken cue cards you can rehearse with."
+            : assessment
             ? "Upload the assessment notification to auto-generate flashcards, or add your own below."
             : "Flashcards generated from your assessments will appear here."
         }
@@ -237,7 +240,10 @@ function AddAndGenerate({
 }) {
   const addFlashcard = useData((s) => s.addFlashcard);
   const addFlashcards = useData((s) => s.addFlashcards);
+  const isProject = (assessment.kind ?? "study") === "project";
   const [open, setOpen] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draft, setDraft] = useState("");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [busy, setBusy] = useState(false);
@@ -269,16 +275,86 @@ function AddAndGenerate({
     }
   }
 
+  // Projects/presentations: cue cards come from the student's OWN drafted talk,
+  // never from the task notification (that only produces junk about the task).
+  async function generateFromDraft() {
+    if (!draft.trim()) return;
+    setBusy(true);
+    try {
+      const more = await ai.generateFlashcards({
+        subjectType: subject.type,
+        subjectName: subject.name,
+        assessmentTitle: assessment.title,
+        text: draft.trim(),
+        count: 10,
+        style: "cuecards",
+      });
+      addFlashcards(
+        more.map((f) => ({
+          subjectId: subject.id,
+          assessmentId: assessment.id,
+          front: f.front,
+          back: f.back,
+          source: "ai" as const,
+        }))
+      );
+      setDraftOpen(false);
+      setDraft("");
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className={compact ? "flex gap-2" : "flex flex-wrap justify-center gap-2"}>
-      {assessment.notification?.rawText && (
-        <Button size="sm" variant="secondary" onClick={generateMore} disabled={busy}>
-          <Sparkles size={14} /> {busy ? "Generating…" : "Generate more"}
+      {isProject ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setDraftOpen((v) => !v)}
+          disabled={busy}
+        >
+          <Sparkles size={14} /> Cue cards from my draft
         </Button>
+      ) : (
+        assessment.notification?.rawText && (
+          <Button size="sm" variant="secondary" onClick={generateMore} disabled={busy}>
+            <Sparkles size={14} /> {busy ? "Generating…" : "Generate more"}
+          </Button>
+        )
       )}
       <Button size="sm" variant={compact ? "ghost" : "primary"} onClick={() => setOpen((v) => !v)}>
         <Plus size={14} /> Add card
       </Button>
+      {draftOpen && (
+        <div className="mt-2 w-full rounded-3xl border border-black/[0.06] bg-white/70 p-4">
+          <p className="mb-2 text-[13px] text-ink-muted">
+            Paste your talk — script, outline or slide notes. Anchor turns it into
+            spoken cue cards (section title on the front, talking points on the back).
+          </p>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Paste your pitch / talk draft here…"
+            className="min-h-[140px]"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDraftOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!draft.trim() || busy}
+              onClick={generateFromDraft}
+            >
+              <Sparkles size={14} /> {busy ? "Generating…" : "Make cue cards"}
+            </Button>
+          </div>
+        </div>
+      )}
       {open && (
         <div className="mt-2 w-full rounded-3xl border border-black/[0.06] bg-white/70 p-4">
           <Input

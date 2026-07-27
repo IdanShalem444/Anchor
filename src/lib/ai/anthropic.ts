@@ -69,7 +69,7 @@ export async function analyze(
     "CRITICAL: 'overview', 'keyConcepts', 'requirements' and flashcards must describe the ACTUAL subject matter and task — NEVER admin/instruction words like submit, criterion, complete, minimal, weighting, due, worth, stage or canvas. " +
     "THEN tailor the materials to that kind. " +
     "study/exam/in-class — focus on WHAT TO KNOW and HOW TO STUDY: 'keyConcepts' = the exact topics/definitions/formulae to master; 'notes' explain that content; 'revision.guide' is a concrete study method; 'plan' is an ordered revision/study schedule; fill 'revision.practiceQuestions' and 'revision.examQuestions' with strong exam-realistic questions; give 6-10 flashcards covering the key facts. " +
-    "project — BREAK IT DOWN: use the brief, marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete actionable steps from understanding the task to final submission, mapped to the requirements/marking criteria; 'requirements' lists exactly what to deliver. A project is PRODUCED, not memorised, so return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory. If it is a PRESENTATION/oral: make the flashcards CUE CARDS (front = a slide/section or a likely audience question; back = concise talking points to say ALOUD in your own words, not paragraphs), set 'revision.guide' to a plan to MEMORISE and REHEARSE the talk (chunk it, practise each section out loud, time yourself, delivery + Q&A tips), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content.";
+    "project — BREAK IT DOWN: use the brief, marking criteria/rubric, attachments and syllabus so 'plan' is a thorough, ordered list of concrete actionable steps from understanding the task to final submission, mapped to the requirements/marking criteria; 'requirements' lists exactly what to deliver. A project is PRODUCED, not memorised, so return flashcards:[] and leave revision.practiceQuestions and revision.examQuestions as [] — UNLESS the notification requires the student to PRESENT or LEARN content from memory. If it is a PRESENTATION/oral: cue cards can only come from the student's OWN drafted talk — if the notification only DESCRIBES the task (the usual case), return flashcards:[] (never invent cards about the task description; the student pastes their draft later to make real cue cards) and end 'plan' with: draft the talk, turn the draft into cue cards, rehearse. Only if the notification itself contains the content to present, make the flashcards CUE CARDS from it (front = a slide/section or a likely audience question; back = concise talking points to say ALOUD in your own words, not paragraphs). Always set 'revision.guide' to a plan to MEMORISE and REHEARSE the talk (chunk it, practise each section out loud, time yourself, delivery + Q&A tips), and keep 'plan' on preparing, building, rehearsing and refining the talk. For a viva/test component, add targeted flashcards/practice for exactly that content.";
   const user = `${header(input)}\nCanvas's guess at the type (may be wrong — you decide): ${
     input.kind || "unknown"
   }.\n\nAssessment notification:\n"""\n${input.text.slice(0, 8000)}\n"""`;
@@ -111,16 +111,24 @@ export async function analyze(
 }
 
 export async function generateFlashcards(
-  input: AnalyzeInput & { count?: number },
+  input: AnalyzeInput & { count?: number; style?: "cuecards" },
   o: { pro?: boolean } = {}
 ): Promise<{ front: string; back: string }[]> {
   const system =
-    "You are Anchor, a study assistant. Create flashcards from the assessment. " +
-    'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
-    `Make ${input.count ?? 8} focused cards.`;
+    input.style === "cuecards"
+      ? "You are Anchor, a presentation coach. Convert the student's OWN drafted talk/script/outline into spoken cue cards, in the draft's own order. " +
+        'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
+        "front = the section/slide title, or the question that part answers. " +
+        "back = 2-4 short talking points in natural spoken language (separate with \\n) — enough to jog memory while presenting, never full sentences to read out. " +
+        "Use only what is in the draft; do not invent content. " +
+        `Make up to ${input.count ?? 8} cards (fewer if the draft is short).`
+      : "You are Anchor, a study assistant. Create flashcards from the assessment. " +
+        'Respond with ONLY valid JSON: {"flashcards":[{"front":string,"back":string}]}. ' +
+        `Make ${input.count ?? 8} focused cards.`;
+  const label = input.style === "cuecards" ? "The student's drafted talk" : "Content";
   const raw = await complete(
     system,
-    [{ role: "user", content: `${header(input)}\n\nContent:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
+    [{ role: "user", content: `${header(input)}\n\n${label}:\n"""\n${input.text.slice(0, 6000)}\n"""` }],
     1200,
     o.pro
   );
