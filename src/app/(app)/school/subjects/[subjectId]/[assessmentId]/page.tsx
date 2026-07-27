@@ -31,6 +31,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { EmptyState, ProgressBar } from "@/components/ui/misc";
 import { UploadNotification } from "@/components/assessment/UploadNotification";
 import { FlashcardsView } from "@/components/assessment/FlashcardsView";
+import { RehearseView } from "@/components/assessment/RehearseView";
 import { TestsView } from "@/components/assessment/TestsView";
 import { EssayTools } from "@/components/assessment/EssayTools";
 import { ChatView } from "@/components/chat/ChatView";
@@ -133,12 +134,11 @@ export default function AssessmentWorkspace({
     ...(!isProject || (generated?.notes.length ?? 0) > 0
       ? [{ key: "notes" as TabKey, label: isProject ? "Notes" : "Study notes", icon: NotebookPen }]
       : []),
-    ...(!isProject || hasRevisionContent
+    ...(!isProject || hasRevisionContent || cards.length > 0
       ? [{ key: "revision" as TabKey, label: isProject ? "Rehearse" : "Revision", icon: BookOpen }]
       : []),
-    ...(!isProject || cards.length > 0
-      ? [{ key: "flashcards" as TabKey, label: isProject ? "Cue cards" : "Flashcards", icon: Layers }]
-      : []),
+    // Always available on projects — it hosts the "cue cards from my draft" tool.
+    { key: "flashcards" as TabKey, label: isProject ? "Cue cards" : "Flashcards", icon: Layers },
     ...(!isProject || tests.length > 0
       ? [{ key: "tests" as TabKey, label: "Tests", icon: ClipboardCheck }]
       : []),
@@ -250,7 +250,17 @@ export default function AssessmentWorkspace({
             {activeTab === "notes" &&
               (generated ? <NotesView assessment={assessment} /> : <LockedHint label="study notes" />)}
             {activeTab === "revision" &&
-              (generated ? <RevisionView assessment={assessment} /> : <LockedHint label="revision hub" />)}
+              (isProject ? (
+                <RehearseView
+                  assessment={assessment}
+                  cardCount={cards.length}
+                  onOpenCueCards={() => setTab("flashcards")}
+                />
+              ) : generated ? (
+                <RevisionView assessment={assessment} />
+              ) : (
+                <LockedHint label="revision hub" />
+              ))}
             {activeTab === "flashcards" && (
               <FlashcardsView cards={cards} subject={subject} assessment={assessment} />
             )}
