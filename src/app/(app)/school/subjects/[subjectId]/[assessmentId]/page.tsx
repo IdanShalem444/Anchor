@@ -36,7 +36,7 @@ import { EssayTools } from "@/components/assessment/EssayTools";
 import { ChatView } from "@/components/chat/ChatView";
 import { useData } from "@/store/data";
 import { subjectById, assessmentById, readiness } from "@/lib/selectors";
-import { sanitizeCanvasHtml } from "@/lib/canvas";
+import { sanitizeCanvasHtml } from "@/lib/sanitizeHtml";
 import { SUBJECT_ICON } from "@/lib/subjectMeta";
 import { subjectFeatures } from "@/lib/subjectMeta";
 import { dueLabel } from "@/lib/format";
