@@ -77,6 +77,9 @@ export type Term = "Term 1" | "Term 2" | "Term 3" | "Term 4";
 
 export interface AssessmentNotification {
   rawText: string;
+  /** Original Canvas description HTML (sanitized at render) — shown as-is in
+   *  the Notification tab. Absent for user-uploaded notifications. */
+  html?: string;
   fileName?: string;
   fileType?: string;
   uploadedAt: number;

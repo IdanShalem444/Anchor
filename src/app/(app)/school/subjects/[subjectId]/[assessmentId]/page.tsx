@@ -36,6 +36,7 @@ import { EssayTools } from "@/components/assessment/EssayTools";
 import { ChatView } from "@/components/chat/ChatView";
 import { useData } from "@/store/data";
 import { subjectById, assessmentById, readiness } from "@/lib/selectors";
+import { sanitizeCanvasHtml } from "@/lib/canvas";
 import { SUBJECT_ICON } from "@/lib/subjectMeta";
 import { subjectFeatures } from "@/lib/subjectMeta";
 import { dueLabel } from "@/lib/format";
@@ -46,6 +47,7 @@ import { cn } from "@/lib/cn";
 
 type TabKey =
   | "summary"
+  | "notification"
   | "plan"
   | "notes"
   | "revision"
@@ -70,6 +72,7 @@ export default function AssessmentWorkspace({
   useEffect(() => {
     const allowed: TabKey[] = [
       "summary",
+      "notification",
       "plan",
       "notes",
       "revision",
@@ -121,6 +124,9 @@ export default function AssessmentWorkspace({
 
   const tabs: { key: TabKey; label: string; icon: typeof FileText }[] = [
     { key: "summary", label: "Summary", icon: Sparkles },
+    ...(assessment.notification
+      ? [{ key: "notification" as TabKey, label: "Notification", icon: FileText }]
+      : []),
     ...(isProject || assessment.steps?.length
       ? [{ key: "plan" as TabKey, label: "Plan", icon: ListChecks }]
       : []),
@@ -240,6 +246,7 @@ export default function AssessmentWorkspace({
               ) : (
                 <LockedHint label="summary" />
               ))}
+            {activeTab === "notification" && <NotificationView assessment={assessment} />}
             {activeTab === "notes" &&
               (generated ? <NotesView assessment={assessment} /> : <LockedHint label="study notes" />)}
             {activeTab === "revision" &&
@@ -507,6 +514,42 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // ── summary ─────────────────────────────────────────────────────
+
+/** The exact assessment notification, as it came from Canvas (original HTML,
+ *  sanitized) or as uploaded (extracted text). Read-only reference. */
+function NotificationView({ assessment }: { assessment: Assessment }) {
+  const n = assessment.notification;
+  if (!n) return null;
+  const html = n.html ? sanitizeCanvasHtml(n.html) : "";
+  return (
+    <GlassCard className="p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] pb-3">
+        <div className="flex items-center gap-2 text-[13px]">
+          <FileText size={15} className="text-ink-faint" />
+          <span className="font-medium text-ink">{n.fileName || "Notification"}</span>
+        </div>
+        <span className="text-[12px] text-ink-faint">
+          {n.fileType === "canvas" ? "Synced" : "Uploaded"}{" "}
+          {new Date(n.uploadedAt).toLocaleDateString(undefined, {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+      </div>
+      {html ? (
+        <div
+          className="text-[14px] leading-relaxed text-ink [&_a]:font-medium [&_a]:text-anchor [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-3 [&_blockquote]:text-ink-muted [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-black/[0.08] [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_strong]:font-semibold [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-black/10 [&_td]:p-2 [&_th]:border [&_th]:border-black/10 [&_th]:bg-black/[0.03] [&_th]:p-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <pre className="whitespace-pre-wrap font-sans text-[14px] leading-relaxed text-ink">
+          {n.rawText}
+        </pre>
+      )}
+    </GlassCard>
+  );
+}
 
 function SummaryView({ assessment }: { assessment: Assessment }) {
   const s = assessment.generated!.summary;

@@ -58,6 +58,7 @@ export interface CanvasImportPayload {
     name: string;
     dueAt?: string | null;
     description?: string;
+    descriptionHtml?: string;
     url?: string;
     points?: number | null;
     kind?: "study" | "project";
@@ -724,6 +725,7 @@ export const useData = create<DataState>()(
             const brief = canvasBrief(a, due);
             const notification = {
               rawText: brief,
+              ...(a.descriptionHtml ? { html: a.descriptionHtml } : {}),
               fileName: `Canvas · ${subject.name}`,
               fileType: "canvas",
               uploadedAt: Date.now(),
@@ -759,9 +761,13 @@ export const useData = create<DataState>()(
                 kind: a.kind ?? existing.kind,
                 ...gradePatch,
               });
-              // Refresh the Canvas brief as the notification, unless materials
-              // were already generated (don't clobber the user's work).
-              if (hasBrief && !existing.generated) {
+              // Refresh the Canvas brief as the notification. Safe when the
+              // current notification is Canvas-sourced (or missing) — it only
+              // replaces the brief, never generated materials. A user-UPLOADED
+              // notification on a generated assessment is left alone.
+              const notifIsOurs =
+                !existing.notification || existing.notification.fileType === "canvas";
+              if (hasBrief && (!existing.generated || notifIsOurs)) {
                 get().setNotification(existing.id, notification);
               }
               assessmentsUpdated++;
