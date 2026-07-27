@@ -104,21 +104,49 @@ export default function AssessmentWorkspace({
   const tests = d.tests.filter((t) => t.assessmentId === assessment.id);
   const generated = assessment.generated;
 
+  // A project is produced, not memorised — study tabs (revision / flashcards /
+  // tests) only appear when they actually hold content, e.g. cue cards + a
+  // rehearsal plan for a presentation, and get labels to match.
+  const isProject = (assessment.kind ?? "study") === "project";
+  const rev = generated?.revision;
+  const hasRevisionContent = !!(
+    rev &&
+    (rev.guide.trim() ||
+      rev.practiceQuestions.length ||
+      rev.examQuestions.length ||
+      rev.commonMistakes.length ||
+      rev.misconceptions.length ||
+      rev.extras.length)
+  );
+
   const tabs: { key: TabKey; label: string; icon: typeof FileText }[] = [
     { key: "summary", label: "Summary", icon: Sparkles },
-    ...(assessment.kind === "project" || assessment.steps?.length
+    ...(isProject || assessment.steps?.length
       ? [{ key: "plan" as TabKey, label: "Plan", icon: ListChecks }]
       : []),
-    { key: "notes", label: "Study notes", icon: NotebookPen },
-    { key: "revision", label: "Revision", icon: BookOpen },
-    { key: "flashcards", label: "Flashcards", icon: Layers },
-    { key: "tests", label: "Tests", icon: ClipboardCheck },
+    ...(!isProject || (generated?.notes.length ?? 0) > 0
+      ? [{ key: "notes" as TabKey, label: isProject ? "Notes" : "Study notes", icon: NotebookPen }]
+      : []),
+    ...(!isProject || hasRevisionContent
+      ? [{ key: "revision" as TabKey, label: isProject ? "Rehearse" : "Revision", icon: BookOpen }]
+      : []),
+    ...(!isProject || cards.length > 0
+      ? [{ key: "flashcards" as TabKey, label: isProject ? "Cue cards" : "Flashcards", icon: Layers }]
+      : []),
+    ...(!isProject || tests.length > 0
+      ? [{ key: "tests" as TabKey, label: "Tests", icon: ClipboardCheck }]
+      : []),
     ...(features.essayTools
       ? [{ key: "essay" as TabKey, label: "Essay tools", icon: BookOpen }]
       : []),
     { key: "tutor", label: "AI Tutor", icon: MessageSquare },
     { key: "resources", label: "Resources", icon: Paperclip },
   ];
+
+  // If the active tab is hidden (e.g. after toggling Study ↔ Project), render
+  // Summary instead of an orphaned panel. Derived, not an effect — this sits
+  // below an early return, so hooks aren't allowed here.
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : "summary";
 
   return (
     <div>
@@ -186,7 +214,7 @@ export default function AssessmentWorkspace({
             onClick={() => setTab(t.key)}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13.5px] font-medium transition-colors",
-              tab === t.key
+              activeTab === t.key
                 ? "bg-anchor/10 text-anchor"
                 : "text-ink-soft hover:bg-black/[0.04]"
             )}
@@ -200,32 +228,32 @@ export default function AssessmentWorkspace({
       <div className="mt-4">
         <AnimatePresence mode="wait">
           <motion.div
-            key={tab}
+            key={activeTab}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
           >
-            {tab === "summary" &&
+            {activeTab === "summary" &&
               (generated ? (
                 <SummaryView assessment={assessment} />
               ) : (
                 <LockedHint label="summary" />
               ))}
-            {tab === "notes" &&
+            {activeTab === "notes" &&
               (generated ? <NotesView assessment={assessment} /> : <LockedHint label="study notes" />)}
-            {tab === "revision" &&
+            {activeTab === "revision" &&
               (generated ? <RevisionView assessment={assessment} /> : <LockedHint label="revision hub" />)}
-            {tab === "flashcards" && (
+            {activeTab === "flashcards" && (
               <FlashcardsView cards={cards} subject={subject} assessment={assessment} />
             )}
-            {tab === "tests" && (
+            {activeTab === "tests" && (
               <TestsView tests={tests} subject={subject} assessment={assessment} />
             )}
-            {tab === "plan" && <PlanView assessment={assessment} />}
-            {tab === "essay" && <EssayTools subject={subject} assessment={assessment} />}
-            {tab === "tutor" && <AssessmentTutor subject={subject} assessment={assessment} />}
-            {tab === "resources" && <ResourcesView subject={subject} assessment={assessment} />}
+            {activeTab === "plan" && <PlanView assessment={assessment} />}
+            {activeTab === "essay" && <EssayTools subject={subject} assessment={assessment} />}
+            {activeTab === "tutor" && <AssessmentTutor subject={subject} assessment={assessment} />}
+            {activeTab === "resources" && <ResourcesView subject={subject} assessment={assessment} />}
           </motion.div>
         </AnimatePresence>
       </div>
