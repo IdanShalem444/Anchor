@@ -74,6 +74,15 @@ export interface CanvasImportPayload {
   }[];
 }
 
+/** A due date this long past on unfinished work is stale Canvas data (wrong
+ *  term / never updated) — drop it rather than show "52 days overdue" forever. */
+const STALE_DUE_DAYS = 50;
+function staleDue(iso?: string): boolean {
+  if (!iso) return false;
+  const t = new Date(`${iso}T23:59:59`).getTime();
+  return Number.isFinite(t) && Date.now() - t > STALE_DUE_DAYS * 86_400_000;
+}
+
 /** Compose an assessment notification/brief from a Canvas assignment. */
 function canvasBrief(
   a: CanvasImportPayload["assignments"][number],
@@ -754,7 +763,15 @@ export const useData = create<DataState>()(
               .data()
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
             if (!subject) continue;
-            const due = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+            const rawDue = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+            const finished =
+              a.gradedAt != null ||
+              a.score != null ||
+              (!!a.grade && a.grade !== "") ||
+              !!a.submitted;
+            // Finished work keeps its historical date; unfinished work drops
+            // a long-stale one.
+            const due = rawDue && (finished || !staleDue(rawDue)) ? rawDue : undefined;
 
             // Day-to-day task (not formally assessed) → Homework, not an
             // assessment. Runs automatically on every sync.
@@ -825,7 +842,12 @@ export const useData = create<DataState>()(
             if (existing) {
               get().updateAssessment(existing.id, {
                 title: a.name || existing.title,
-                dueDate: due ?? existing.dueDate,
+                // Also scrub a stale stored date off unfinished work.
+                dueDate:
+                  due ??
+                  (existing.status !== "completed" && staleDue(existing.dueDate)
+                    ? undefined
+                    : existing.dueDate),
                 description: a.description || existing.description,
                 kind: a.kind ?? existing.kind,
                 ...gradePatch,
