@@ -36,6 +36,27 @@ export interface CanvasAssignment {
   missing?: boolean;
   /** Formatted marking rubric / criteria, if the assignment has one. */
   rubric?: string;
+  /** Canvas grading_type (e.g. "points", "not_graded"). */
+  gradingType?: string;
+  /** True when this is formally assessed work; false = a day-to-day task
+   *  (imported as homework, not an assessment). Set by syncCanvas. */
+  assessed?: boolean;
+}
+
+/**
+ * Formal assessment vs. day-to-day task. Only explicit evidence counts:
+ * Canvas says it's worth marks / has a rubric, the teacher actually graded or
+ * commented on it, or the notification says marked/assessed/weighting/etc.
+ */
+export function isAssessedWork(a: CanvasAssignment): boolean {
+  if (a.gradingType === "not_graded") return false; // Canvas says unmarked
+  if ((a.points ?? 0) > 0) return true; // worth marks
+  if (a.rubric && a.rubric.trim()) return true; // has marking criteria
+  if (a.score != null || (a.grade && a.grade !== "")) return true; // was marked
+  if (a.feedback && a.feedback.length > 0) return true; // teacher commented
+  return /\b(assess\w*|marked|marking|weight\w*|graded|grading|rubric|criteri\w*|exam|worth\s+\d)/i.test(
+    `${a.name} ${a.description || ""}`
+  );
 }
 
 /** Format a Canvas rubric (array of criteria) into readable marking criteria. */
@@ -199,6 +220,7 @@ export async function fetchAssignments(
     points: x.points_possible ?? null,
     kind: classifyKind(x.name || "", x.submission_types || []),
     rubric: formatRubric(x.rubric),
+    gradingType: x.grading_type || undefined,
   }));
 }
 
@@ -352,6 +374,8 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
             a.submittedAt = g.submittedAt;
             a.missing = g.missing;
           }
+          // After grades merge, so marks/feedback count as evidence.
+          a.assessed = isAssessedWork(a);
         }
         assignments.push(...as);
       } catch {

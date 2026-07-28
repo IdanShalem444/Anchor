@@ -69,6 +69,8 @@ export interface HomeworkItem {
   dueDate?: string;
   done: boolean;
   createdAt: number;
+  /** Set when this task was auto-imported from a Canvas assignment. */
+  canvasId?: number;
 }
 
 export type Priority = "low" | "medium" | "high";

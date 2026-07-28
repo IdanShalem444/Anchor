@@ -69,6 +69,8 @@ export interface CanvasImportPayload {
     submitted?: boolean;
     submittedAt?: number | null;
     rubric?: string;
+    /** False = a day-to-day task (goes to Homework), true/undefined = assessment. */
+    assessed?: boolean;
   }[];
 }
 
@@ -218,11 +220,16 @@ interface DataState {
   updateHomework: (id: string, patch: Partial<HomeworkItem>) => void;
   deleteHomework: (id: string) => void;
 
+  /** Hard-remove an assessment (no trash) — used when a Canvas re-sync
+   *  reclassifies it as a day-to-day task, so it can move to Homework. */
+  purgeAssessment: (id: string) => void;
+
   seedExample: () => void;
   importFromCanvas: (payload: CanvasImportPayload) => {
     subjectsAdded: number;
     assessmentsAdded: number;
     assessmentsUpdated: number;
+    tasksAdded: number;
   };
 }
 
@@ -362,6 +369,14 @@ export const useData = create<DataState>()(
             if (cid != null && d.deletedCanvasIds) {
               d.deletedCanvasIds = d.deletedCanvasIds.filter((x) => x !== cid);
             }
+          }),
+        purgeAssessment: (id) =>
+          mutate((d) => {
+            // Deliberately does NOT record in deletedCanvasIds — the same
+            // Canvas item lives on as a homework task.
+            d.assessments = d.assessments.filter((x) => x.id !== id);
+            d.flashcards = d.flashcards.filter((c) => c.assessmentId !== id);
+            d.tests = d.tests.filter((t) => t.assessmentId !== id);
           }),
         setNotification: (id, n) =>
           mutate((d) => {
@@ -663,7 +678,8 @@ export const useData = create<DataState>()(
               title: h.title,
               subjectId: h.subjectId,
               dueDate: h.dueDate,
-              done: false,
+              canvasId: h.canvasId,
+              done: h.done ?? false,
               createdAt: Date.now(),
             });
           }),
@@ -703,6 +719,7 @@ export const useData = create<DataState>()(
 
         importFromCanvas: (payload) => {
           let subjectsAdded = 0;
+          let tasksAdded = 0;
           let assessmentsAdded = 0;
           let assessmentsUpdated = 0;
 
@@ -739,6 +756,43 @@ export const useData = create<DataState>()(
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
             if (!subject) continue;
             const due = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+
+            // Day-to-day task (not formally assessed) → Homework, not an
+            // assessment. Runs automatically on every sync.
+            if (a.assessed === false) {
+              const done = !!(a.submitted || a.gradedAt != null || a.score != null);
+              const hw = (get().data().homework || []).find(
+                (h) => h.canvasId === a.canvasId
+              );
+              if (hw) {
+                get().updateHomework(hw.id, {
+                  title: a.name || hw.title,
+                  dueDate: due ?? hw.dueDate,
+                  ...(done && !hw.done ? { done: true } : {}),
+                });
+              } else {
+                // Migrate a previously imported assessment — unless the user
+                // has generated materials on it (then their work wins).
+                const asExisting = get()
+                  .data()
+                  .assessments.find((x) => x.canvasId === a.canvasId && !x.deletedAt);
+                if (asExisting?.generated) {
+                  // keep as an assessment
+                } else {
+                  if (asExisting) get().purgeAssessment(asExisting.id);
+                  get().addHomework({
+                    title: a.name || "Task",
+                    subjectId: subject.id,
+                    dueDate: due,
+                    canvasId: a.canvasId,
+                    done,
+                  });
+                  tasksAdded++;
+                }
+              }
+              continue;
+            }
+
             const hasBrief = !!(a.description && a.description.trim().length > 10);
             const brief = canvasBrief(a, due);
             const notification = {
@@ -806,7 +860,7 @@ export const useData = create<DataState>()(
             }
           }
 
-          return { subjectsAdded, assessmentsAdded, assessmentsUpdated };
+          return { subjectsAdded, assessmentsAdded, assessmentsUpdated, tasksAdded };
         },
       };
     },
