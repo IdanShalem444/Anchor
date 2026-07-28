@@ -1,7 +1,7 @@
 import { uid } from "@/lib/format";
 import type { Difficulty, StudyNote, TestQuestion } from "@/lib/types";
 import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
-import { IMPROVE_SYS, sanitizeImprovedHtml } from "./improve";
+import { IMPROVE_SYS, FORMAT_SYS, sanitizeImprovedHtml } from "./improve";
 
 const BASE_URL =
   process.env.OPENROUTER_BASE_URL?.replace(/\/$/, "") ||
@@ -374,5 +374,22 @@ export async function improveNote(text: string, o: { pro?: boolean } = {}): Prom
   );
   const out = sanitizeImprovedHtml(raw);
   if (out.length < 4) throw new Error("OpenRouter improve: no usable HTML");
+  return out;
+}
+
+/** Presentation-only reformat of a notification — content stays verbatim. */
+export async function formatNotification(
+  text: string,
+  o: { pro?: boolean } = {}
+): Promise<string> {
+  const raw = await complete(
+    [
+      { role: "system", content: FORMAT_SYS },
+      { role: "user", content: text.slice(0, 8000) },
+    ],
+    { maxTokens: 2600, pro: o.pro }
+  );
+  const out = sanitizeImprovedHtml(raw);
+  if (out.length < 4) throw new Error("OpenRouter format: no usable HTML");
   return out;
 }

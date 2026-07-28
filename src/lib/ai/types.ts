@@ -62,4 +62,6 @@ export interface AIProvider {
   }): Promise<string>;
   /** Rewrite note text for structure + clarity; returns clean minimal HTML. */
   improveNote(text: string): Promise<string>;
+  /** Reformat a notification into clean HTML WITHOUT changing any wording. */
+  formatNotification(text: string): Promise<string>;
 }

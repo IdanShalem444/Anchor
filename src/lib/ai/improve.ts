@@ -14,6 +14,17 @@ export const IMPROVE_SYS =
   "Respond with ONLY clean minimal HTML using <h3>, <p>, <ul>, <li>, <strong>, <em>, <br>. " +
   "No markdown, no code fences, no commentary.";
 
+// Notification formatter — presentation only, zero rewording. Unlike
+// IMPROVE_SYS (which rewrites), this must keep every word exactly as-is.
+export const FORMAT_SYS =
+  "You are a formatting engine. Convert the student's assessment notification into clean semantic HTML for display.\n" +
+  "STRICT RULE — the content is untouchable: do NOT change, add, remove, reorder, summarise, correct or reword ANYTHING. " +
+  "Every sentence, number, date and name must appear verbatim, in the original order. You only add structure around the existing text.\n" +
+  "Structure to apply: <h2>/<h3> only for lines that are clearly headings in the original; <ul>/<ol> with <li> for lines that are clearly list items; " +
+  "<p> for prose; <strong> for short field labels the text already has (e.g. 'Due:', 'Worth:', 'Marking criteria:'); " +
+  "<a href> only around URLs already present in the text. Nothing else.\n" +
+  "Respond with ONLY the HTML fragment — no markdown, no code fences, no commentary, no <html>/<body>.";
+
 /**
  * Strip fences / reasoning preamble, keep just the HTML, and collapse inter-tag
  * whitespace so it renders tidily. Returns "" if the model didn't actually

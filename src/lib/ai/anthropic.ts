@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { uid } from "@/lib/format";
 import type { Difficulty, StudyNote, TestQuestion } from "@/lib/types";
 import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
-import { IMPROVE_SYS, sanitizeImprovedHtml } from "./improve";
+import { IMPROVE_SYS, FORMAT_SYS, sanitizeImprovedHtml } from "./improve";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 
@@ -211,5 +211,16 @@ export async function improveNote(text: string, o: { pro?: boolean } = {}): Prom
   const raw = await complete(IMPROVE_SYS, [{ role: "user", content: text.slice(0, 8000) }], 2000, o.pro);
   const out = sanitizeImprovedHtml(raw);
   if (out.length < 4) throw new Error("Anthropic improve: no usable HTML");
+  return out;
+}
+
+/** Presentation-only reformat of a notification — content stays verbatim. */
+export async function formatNotification(
+  text: string,
+  o: { pro?: boolean } = {}
+): Promise<string> {
+  const raw = await complete(FORMAT_SYS, [{ role: "user", content: text.slice(0, 8000) }], 2600, o.pro);
+  const out = sanitizeImprovedHtml(raw);
+  if (out.length < 4) throw new Error("Anthropic format: no usable HTML");
   return out;
 }

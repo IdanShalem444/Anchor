@@ -135,4 +135,14 @@ export class HttpAIProvider implements AIProvider {
       return fallback.improveNote(text);
     }
   }
+
+  async formatNotification(text: string): Promise<string> {
+    try {
+      const r = await post<{ html: string }>("/api/ai/format", { text });
+      return r.html;
+    } catch (e) {
+      rethrowIfBlocked(e);
+      return fallback.formatNotification(text);
+    }
+  }
 }

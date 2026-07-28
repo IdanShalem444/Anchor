@@ -12,7 +12,8 @@ export interface PlanDef {
   id: Plan;
   label: string;
   price: string;
-  /** Monthly pooled AI-generation cap (analyze/flashcards/test/chat/improve each = 1). */
+  /** Monthly pooled AI-generation cap — analyze / flashcards & cue cards /
+   *  test / chat / improve / notification-format each consume 1. */
   aiLimit: number;
   /** Max active subjects (Infinity = unlimited). */
   subjects: number;
@@ -33,6 +34,7 @@ export const PLANS: Record<Plan, PlanDef> = {
       "15 AI generations / month",
       "Up to 3 subjects",
       "Flashcards, tests & AI tutor",
+      "Cue cards & rehearsal for presentations",
       "Personal notes & reminders",
     ],
   },

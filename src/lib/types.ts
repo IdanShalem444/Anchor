@@ -80,6 +80,8 @@ export interface AssessmentNotification {
   /** Original Canvas description HTML (sanitized at render) — shown as-is in
    *  the Notification tab. Absent for user-uploaded notifications. */
   html?: string;
+  /** AI-tidied HTML of rawText (structure only, wording verbatim). */
+  aiHtml?: string;
   fileName?: string;
   fileType?: string;
   uploadedAt: number;

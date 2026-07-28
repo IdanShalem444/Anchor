@@ -36,6 +36,7 @@ import { TestsView } from "@/components/assessment/TestsView";
 import { EssayTools } from "@/components/assessment/EssayTools";
 import { ChatView } from "@/components/chat/ChatView";
 import { useData } from "@/store/data";
+import { ai } from "@/lib/ai";
 import { subjectById, assessmentById, readiness } from "@/lib/selectors";
 import { sanitizeCanvasHtml } from "@/lib/sanitizeHtml";
 import { SUBJECT_ICON } from "@/lib/subjectMeta";
@@ -525,37 +526,89 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── summary ─────────────────────────────────────────────────────
 
-/** The exact assessment notification, as it came from Canvas (original HTML,
- *  sanitized) or as uploaded (extracted text). Read-only reference. */
+const NOTIF_PROSE =
+  "text-[14px] leading-relaxed text-ink [&_a]:font-medium [&_a]:text-anchor [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-3 [&_blockquote]:text-ink-muted [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-black/[0.08] [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_strong]:font-semibold [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-black/10 [&_td]:p-2 [&_th]:border [&_th]:border-black/10 [&_th]:bg-black/[0.03] [&_th]:p-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5";
+
+/** The exact assessment notification: Canvas's original HTML or the uploaded
+ *  text, plus an optional AI re-format (structure only — wording verbatim). */
 function NotificationView({ assessment }: { assessment: Assessment }) {
+  const setNotification = useData((s) => s.setNotification);
+  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<"formatted" | "original">("formatted");
   const n = assessment.notification;
   if (!n) return null;
-  const html = n.html ? sanitizeCanvasHtml(n.html) : "";
+
+  const aiHtml = n.aiHtml ? sanitizeCanvasHtml(n.aiHtml) : "";
+  const origHtml = n.html ? sanitizeCanvasHtml(n.html) : "";
+  const showFormatted = !!aiHtml && view === "formatted";
+
+  async function tidy() {
+    if (!n || busy) return;
+    setBusy(true);
+    try {
+      const html = await ai.formatNotification(n.rawText);
+      if (html && html.length > 4) {
+        setNotification(assessment.id, { ...n, aiHtml: html });
+        setView("formatted");
+      }
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <GlassCard className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] pb-3">
         <div className="flex items-center gap-2 text-[13px]">
           <FileText size={15} className="text-ink-faint" />
           <span className="font-medium text-ink">{n.fileName || "Notification"}</span>
+          <span className="text-[12px] text-ink-faint">
+            · {n.fileType === "canvas" ? "synced" : "uploaded"}{" "}
+            {new Date(n.uploadedAt).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+            })}
+          </span>
         </div>
-        <span className="text-[12px] text-ink-faint">
-          {n.fileType === "canvas" ? "Synced" : "Uploaded"}{" "}
-          {new Date(n.uploadedAt).toLocaleDateString(undefined, {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
+        <div className="flex items-center gap-2">
+          {aiHtml ? (
+            <div className="flex gap-1 rounded-full bg-black/[0.04] p-0.5 text-[12px] font-medium">
+              {(["formatted", "original"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-full px-3 py-1 capitalize transition-colors",
+                    view === v ? "bg-white text-ink shadow-sm" : "text-ink-soft"
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={tidy} disabled={busy}>
+              <Sparkles size={14} /> {busy ? "Formatting…" : "Format with AI"}
+            </Button>
+          )}
+        </div>
       </div>
-      {html ? (
-        <div
-          className="text-[14px] leading-relaxed text-ink [&_a]:font-medium [&_a]:text-anchor [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-3 [&_blockquote]:text-ink-muted [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-black/[0.08] [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_strong]:font-semibold [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-black/10 [&_td]:p-2 [&_th]:border [&_th]:border-black/10 [&_th]:bg-black/[0.03] [&_th]:p-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+      {showFormatted ? (
+        <div className={NOTIF_PROSE} dangerouslySetInnerHTML={{ __html: aiHtml }} />
+      ) : origHtml ? (
+        <div className={NOTIF_PROSE} dangerouslySetInnerHTML={{ __html: origHtml }} />
       ) : (
         <pre className="whitespace-pre-wrap font-sans text-[14px] leading-relaxed text-ink">
           {n.rawText}
         </pre>
+      )}
+      {showFormatted && (
+        <p className="mt-4 border-t border-black/[0.06] pt-3 text-[12px] text-ink-faint">
+          AI-tidied layout — the wording is untouched. Switch to “Original” to
+          see it exactly as it came in.
+        </p>
       )}
     </GlassCard>
   );

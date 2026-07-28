@@ -157,3 +157,25 @@ export async function improveNote(text: string, o: Opts = {}): Promise<string> {
   markOffline(o, "improve", reason);
   return mock.improveNote(text);
 }
+
+export async function formatNotification(text: string, o: Opts = {}): Promise<string> {
+  let reason = "no AI provider configured";
+  if (anthropic.enabled()) {
+    try {
+      return await anthropic.formatNotification(text, o);
+    } catch (e) {
+      reason = `Anthropic: ${errMsg(e)}`;
+      console.error("[ai] Anthropic formatNotification failed:", e);
+    }
+  }
+  if (openrouter.enabled()) {
+    try {
+      return await openrouter.formatNotification(text, o);
+    } catch (e) {
+      reason = `OpenRouter: ${errMsg(e)}`;
+      console.error("[ai] OpenRouter formatNotification failed:", e);
+    }
+  }
+  markOffline(o, "format", reason);
+  return mock.formatNotification(text);
+}

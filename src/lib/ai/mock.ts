@@ -628,4 +628,30 @@ export class MockAIProvider implements AIProvider {
       })
       .join("");
   }
+
+  /** Offline formatter — structure only, every word kept verbatim. */
+  async formatNotification(text: string): Promise<string> {
+    await delay(200);
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const blocks = text
+      .split(/\n{2,}/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (blocks.length === 0) return "";
+    return blocks
+      .map((b) => {
+        const ls = b.split(/\n/).map((l) => l.trim()).filter(Boolean);
+        if (ls.length > 1 && ls.every((l) => /^[-*•]/.test(l))) {
+          return (
+            "<ul>" +
+            ls.map((l) => `<li>${esc(l.replace(/^[-*•]\s?/, ""))}</li>`).join("") +
+            "</ul>"
+          );
+        }
+        // keep original line breaks — this is formatting, not rewriting
+        return `<p>${ls.map(esc).join("<br/>")}</p>`;
+      })
+      .join("");
+  }
 }
