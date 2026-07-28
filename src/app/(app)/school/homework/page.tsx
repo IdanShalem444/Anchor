@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { Plus, Check, Trash2, PencilLine } from "lucide-react";
-import { Tag } from "@/components/ui/Badge";
 import { useData } from "@/store/data";
 import { activeSubjects } from "@/lib/selectors";
-import { dueLabel, daysUntil } from "@/lib/format";
 import type { HomeworkItem } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
@@ -16,22 +14,18 @@ export default function HomeworkPage() {
 
   const [title, setTitle] = useState("");
   const [subjectId, setSubjectId] = useState("");
-  const [due, setDue] = useState("");
 
   const items = (d.homework || []).slice();
-  const active = items
-    .filter((h) => !h.done)
-    .sort((a, b) => (a.dueDate || "9999") < (b.dueDate || "9999") ? -1 : 1);
+  const active = items.filter((h) => !h.done);
   const done = items.filter((h) => h.done);
 
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     const t = title.trim();
     if (!t) return;
-    addHomework({ title: t, subjectId: subjectId || undefined, dueDate: due || undefined });
+    addHomework({ title: t, subjectId: subjectId || undefined });
     setTitle("");
     setSubjectId("");
-    setDue("");
   };
 
   return (
@@ -66,12 +60,6 @@ export default function HomeworkPage() {
             </option>
           ))}
         </select>
-        <input
-          type="date"
-          value={due}
-          onChange={(e) => setDue(e.target.value)}
-          className="h-10 rounded-xl border border-black/[0.06] bg-white/70 px-2.5 text-[13px] text-ink shadow-inset focus:border-anchor/30 focus:outline-none"
-        />
         <button
           type="submit"
           disabled={!title.trim()}
@@ -117,11 +105,7 @@ function HomeworkRow({ h }: { h: HomeworkItem }) {
   const d = useData((s) => s.data());
   const subject = h.subjectId ? d.subjects.find((s) => s.id === h.subjectId) : undefined;
   const toggle = useData((s) => s.toggleHomework);
-  const update = useData((s) => s.updateHomework);
   const remove = useData((s) => s.deleteHomework);
-  const du = daysUntil(h.dueDate);
-  const overdue = !h.done && du !== null && du < 0;
-  const soon = !h.done && du !== null && du >= 0 && du <= 2;
 
   return (
     <div
@@ -152,34 +136,19 @@ function HomeworkRow({ h }: { h: HomeworkItem }) {
         >
           {h.title}
         </span>
-        {(subject || h.dueDate) && (
+        {(subject || h.canvasId != null) && (
           <div className="mt-0.5 flex items-center gap-2 text-[12px]">
             {subject && (
               <span className="font-medium" style={{ color: subject.color }}>
                 {subject.name}
               </span>
             )}
-            {subject && h.dueDate && <span className="text-ink-faint">·</span>}
-            {h.dueDate && (
-              <span
-                className={
-                  overdue ? "font-medium text-red-600" : soon ? "font-medium text-amber-600" : "text-ink-muted"
-                }
-              >
-                {dueLabel(h.dueDate)}
-              </span>
-            )}
+            {subject && h.canvasId != null && <span className="text-ink-faint">·</span>}
+            {h.canvasId != null && <span className="text-ink-faint">from Canvas</span>}
           </div>
         )}
       </div>
 
-      <input
-        type="date"
-        value={h.dueDate ?? ""}
-        onChange={(e) => update(h.id, { dueDate: e.target.value || undefined })}
-        className="h-8 shrink-0 rounded-lg border border-black/[0.06] bg-white/70 px-2 text-[12px] text-ink-soft focus:border-anchor/40 focus:outline-none"
-        title="Set due date"
-      />
       <button
         onClick={() => remove(h.id)}
         className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-red-500/10 hover:text-red-600"

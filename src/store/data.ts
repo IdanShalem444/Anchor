@@ -677,7 +677,6 @@ export const useData = create<DataState>()(
               id: uid("hw"),
               title: h.title,
               subjectId: h.subjectId,
-              dueDate: h.dueDate,
               canvasId: h.canvasId,
               done: h.done ?? false,
               createdAt: Date.now(),
@@ -767,7 +766,6 @@ export const useData = create<DataState>()(
               if (hw) {
                 get().updateHomework(hw.id, {
                   title: a.name || hw.title,
-                  dueDate: due ?? hw.dueDate,
                   ...(done && !hw.done ? { done: true } : {}),
                 });
               } else {
@@ -783,7 +781,6 @@ export const useData = create<DataState>()(
                   get().addHomework({
                     title: a.name || "Task",
                     subjectId: subject.id,
-                    dueDate: due,
                     canvasId: a.canvasId,
                     done,
                   });

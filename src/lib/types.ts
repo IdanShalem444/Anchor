@@ -61,12 +61,12 @@ export interface Subject {
   deletedAt?: number | null;
 }
 
-/** A lightweight homework item — day-to-day tasks, separate from formal assessments. */
+/** A lightweight homework item — day-to-day tasks, separate from formal
+ *  assessments. Deliberately date-free: add it, tick it off. */
 export interface HomeworkItem {
   id: string;
   title: string;
   subjectId?: string;
-  dueDate?: string;
   done: boolean;
   createdAt: number;
   /** Set when this task was auto-imported from a Canvas assignment. */
