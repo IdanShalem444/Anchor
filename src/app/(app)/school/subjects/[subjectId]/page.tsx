@@ -33,7 +33,7 @@ import {
 } from "@/lib/selectors";
 import { SUBJECT_ICON, SUBJECT_TAGLINE } from "@/lib/subjectMeta";
 import { SUBJECT_COLORS } from "@/lib/colors";
-import { dueLabel, formatDate } from "@/lib/format";
+import { statusDueLabel, formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export default function SubjectPage({
@@ -194,7 +194,7 @@ export default function SubjectPage({
                         </p>
                         <div className="mt-3 flex items-center justify-between border-t border-black/[0.05] pt-3 text-[12.5px] text-ink-muted">
                           <span className="inline-flex items-center gap-1.5">
-                            <Clock size={13} /> {dueLabel(a.dueDate)}
+                            <Clock size={13} /> {statusDueLabel(a.dueDate, a.status === "completed")}
                           </span>
                           <span className="flex items-center gap-2">
                             {a.generated && (

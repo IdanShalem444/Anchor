@@ -41,7 +41,7 @@ import { subjectById, assessmentById, readiness } from "@/lib/selectors";
 import { sanitizeCanvasHtml } from "@/lib/sanitizeHtml";
 import { SUBJECT_ICON } from "@/lib/subjectMeta";
 import { subjectFeatures } from "@/lib/subjectMeta";
-import { dueLabel } from "@/lib/format";
+import { statusDueLabel } from "@/lib/format";
 import { uid } from "@/lib/format";
 import { useQueryParam } from "@/lib/hooks";
 import type { Assessment, Priority, Subject, Term } from "@/lib/types";
@@ -631,7 +631,10 @@ function SummaryView({ assessment }: { assessment: Assessment }) {
         <GlassCard className="p-6">
           <h3 className="text-[15px] font-semibold text-ink">At a glance</h3>
           <div className="mt-3 space-y-2.5 text-sm">
-            <Row label="Due" value={dueLabel(s.dueDate || assessment.dueDate)} />
+            <Row
+              label="Due"
+              value={statusDueLabel(s.dueDate || assessment.dueDate, assessment.status === "completed")}
+            />
             {s.weighting && <Row label="Weighting" value={s.weighting} />}
             <Row label="Term" value={assessment.term || "—"} />
             <Row label="Priority" value={assessment.priority} />
