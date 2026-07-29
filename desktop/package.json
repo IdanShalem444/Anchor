@@ -17,29 +17,47 @@
   "author": "Anchor",
   "license": "MIT",
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "electron": "^31.7.6",
     "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "app.anchor.study",
     "productName": "Anchor",
-    "files": ["main.js", "preload.js", "bin/**/*", "assets/**/*"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "bin/**/*",
+      "assets/**/*"
+    ],
     "mac": {
       "category": "public.app-category.education",
       "icon": "assets/icon.png",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     },
+    "afterSign": "scripts/notarize.js",
     "dmg": {
       "artifactName": "${productName}.dmg",
       "title": "Install Anchor"
     },
     "win": {
       "icon": "assets/icon.png",
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
       "icon": "assets/icon.png",
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Education"
     }
   }
