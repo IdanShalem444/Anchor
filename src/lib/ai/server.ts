@@ -1,7 +1,7 @@
 import { MockAIProvider } from "./mock";
 import * as openrouter from "./openrouter";
 import * as anthropic from "./anthropic";
-import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
+import type { AnalyzeInput, AnalyzeResult, AssignmentClassifyInput, ChatContext } from "./types";
 import type { Difficulty } from "@/lib/types";
 
 const mock = new MockAIProvider();
@@ -156,6 +156,39 @@ export async function improveNote(text: string, o: Opts = {}): Promise<string> {
   }
   markOffline(o, "improve", reason);
   return mock.improveNote(text);
+}
+
+/**
+ * Canvas-sync assignment classifier tie-break (see classifyAssessedIndicator
+ * in lib/canvas.ts) — only called for items the free indicator list left
+ * ambiguous, batched one call per sync. Not metered against the user's plan:
+ * this is a background sorting courtesy, not a generation they asked for.
+ * If both providers fail, returns {} — the caller treats "undecided" as a
+ * conservative default (task, not assessment).
+ */
+export async function classifyAssignments(
+  items: AssignmentClassifyInput[]
+): Promise<Record<number, boolean>> {
+  if (items.length === 0) return {};
+  let reason = "no AI provider configured";
+  if (anthropic.enabled()) {
+    try {
+      return await anthropic.classifyAssignments(items);
+    } catch (e) {
+      reason = `Anthropic: ${errMsg(e)}`;
+      console.error("[ai] Anthropic classifyAssignments failed:", e);
+    }
+  }
+  if (openrouter.enabled()) {
+    try {
+      return await openrouter.classifyAssignments(items);
+    } catch (e) {
+      reason = `OpenRouter: ${errMsg(e)}`;
+      console.error("[ai] OpenRouter classifyAssignments failed:", e);
+    }
+  }
+  console.warn(`[ai] classifyAssignments unavailable — ${reason}. Ambiguous items default to task.`);
+  return {};
 }
 
 export async function formatNotification(text: string, o: Opts = {}): Promise<string> {

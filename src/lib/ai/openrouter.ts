@@ -1,6 +1,6 @@
 import { uid } from "@/lib/format";
 import type { Difficulty, StudyNote, TestQuestion } from "@/lib/types";
-import type { AnalyzeInput, AnalyzeResult, ChatContext } from "./types";
+import type { AnalyzeInput, AnalyzeResult, AssignmentClassifyInput, ChatContext } from "./types";
 import { IMPROVE_SYS, FORMAT_SYS, sanitizeImprovedHtml } from "./improve";
 
 const BASE_URL =
@@ -391,5 +391,35 @@ export async function formatNotification(
   );
   const out = sanitizeImprovedHtml(raw);
   if (out.length < 4) throw new Error("OpenRouter format: no usable HTML");
+  return out;
+}
+
+/**
+ * Tie-break for Canvas assignments the free indicator-based classifier
+ * couldn't call either way (see classifyAssessedIndicator in lib/canvas.ts).
+ * Batches every ambiguous item from one sync into a single call.
+ */
+export async function classifyAssignments(
+  items: AssignmentClassifyInput[]
+): Promise<Record<number, boolean>> {
+  const sys =
+    "You classify Canvas LMS assignments as either a formal ASSESSMENT (contributes to the student's " +
+    "grade, or the school treats it as something to formally prepare/study for — tests, exams, graded " +
+    "assignments, projects, presentations) or an everyday TASK (routine homework, practice, reading, " +
+    "classwork with no real marking). Decide from the name, points, grading type, category weighting and " +
+    "excerpt given for each. When genuinely unsure, prefer TASK (assessed:false) — it's the safer default. " +
+    'Respond with ONLY JSON: {"results":[{"id":number,"assessed":boolean}]}, one entry per item given, same ids.';
+  const raw = await complete(
+    [
+      { role: "system", content: sys },
+      { role: "user", content: JSON.stringify(items) },
+    ],
+    { json: true, maxTokens: Math.min(300 + items.length * 40, 3000) }
+  );
+  const p = parseJson<any>(raw);
+  const out: Record<number, boolean> = {};
+  for (const r of Array.isArray(p.results) ? p.results : []) {
+    if (typeof r?.id === "number") out[r.id] = !!r.assessed;
+  }
   return out;
 }
