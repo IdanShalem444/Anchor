@@ -28,17 +28,6 @@ export interface AnalyzeResult {
   plan: string[];
 }
 
-/** One assignment the indicator-based classifier couldn't call — passed to
- *  the AI tie-breaker in a single batched call per Canvas sync. */
-export interface AssignmentClassifyInput {
-  id: number;
-  name: string;
-  points: number | null;
-  gradingType?: string;
-  groupWeight?: number;
-  excerpt: string;
-}
-
 export interface ChatContext {
   subject?: Pick<Subject, "name" | "type">;
   assessmentTitle?: string;

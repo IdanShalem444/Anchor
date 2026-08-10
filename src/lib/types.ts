@@ -61,18 +61,6 @@ export interface Subject {
   deletedAt?: number | null;
 }
 
-/** A lightweight homework item — day-to-day tasks, separate from formal
- *  assessments. Deliberately date-free: add it, tick it off. */
-export interface HomeworkItem {
-  id: string;
-  title: string;
-  subjectId?: string;
-  done: boolean;
-  createdAt: number;
-  /** Set when this task was auto-imported from a Canvas assignment. */
-  canvasId?: number;
-}
-
 export type Priority = "low" | "medium" | "high";
 export type AssessmentStatus = "not-started" | "in-progress" | "completed";
 export type Term = "Term 1" | "Term 2" | "Term 3" | "Term 4";

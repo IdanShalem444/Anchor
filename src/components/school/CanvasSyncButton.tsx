@@ -70,7 +70,6 @@ export function CanvasSyncButton() {
       setMsg(
         `Synced from Canvas — ${r.subjectsAdded} subject${r.subjectsAdded === 1 ? "" : "s"}, ` +
           `${r.assessmentsAdded} assessment${r.assessmentsAdded === 1 ? "" : "s"} imported` +
-          `${r.tasksAdded ? `, ${r.tasksAdded} task${r.tasksAdded === 1 ? "" : "s"} → Homework` : ""}` +
           `${r.assessmentsUpdated ? `, ${r.assessmentsUpdated} updated` : ""}. Open one and generate.`
       );
     } catch (e) {

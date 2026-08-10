@@ -13,7 +13,6 @@ import type {
   Essay,
   Flashcard,
   GeneratedContent,
-  HomeworkItem,
   MindEdge,
   MindMap,
   MindNode,
@@ -69,8 +68,6 @@ export interface CanvasImportPayload {
     submitted?: boolean;
     submittedAt?: number | null;
     rubric?: string;
-    /** False = a day-to-day task (goes to Homework), true/undefined = assessment. */
-    assessed?: boolean;
   }[];
 }
 
@@ -110,7 +107,6 @@ export interface UserData {
   notes: Note[];
   projects: Project[];
   mindmaps: MindMap[];
-  homework: HomeworkItem[];
   streak: { count: number; lastActive: string | null };
   /** Canvas assignment ids the user deleted — never re-imported on sync. */
   deletedCanvasIds?: number[];
@@ -129,7 +125,6 @@ const emptyData = (): UserData => ({
   notes: [],
   projects: [],
   mindmaps: [],
-  homework: [],
   streak: { count: 0, lastActive: null },
   deletedCanvasIds: [],
 });
@@ -223,22 +218,11 @@ interface DataState {
   updateMap: (id: string, patch: Partial<MindMap>) => void;
   deleteMap: (id: string) => void;
 
-  // homework
-  addHomework: (h: Pick<HomeworkItem, "title"> & Partial<HomeworkItem>) => void;
-  toggleHomework: (id: string) => void;
-  updateHomework: (id: string, patch: Partial<HomeworkItem>) => void;
-  deleteHomework: (id: string) => void;
-
-  /** Hard-remove an assessment (no trash) — used when a Canvas re-sync
-   *  reclassifies it as a day-to-day task, so it can move to Homework. */
-  purgeAssessment: (id: string) => void;
-
   seedExample: () => void;
   importFromCanvas: (payload: CanvasImportPayload) => {
     subjectsAdded: number;
     assessmentsAdded: number;
     assessmentsUpdated: number;
-    tasksAdded: number;
   };
 }
 
@@ -378,14 +362,6 @@ export const useData = create<DataState>()(
             if (cid != null && d.deletedCanvasIds) {
               d.deletedCanvasIds = d.deletedCanvasIds.filter((x) => x !== cid);
             }
-          }),
-        purgeAssessment: (id) =>
-          mutate((d) => {
-            // Deliberately does NOT record in deletedCanvasIds — the same
-            // Canvas item lives on as a homework task.
-            d.assessments = d.assessments.filter((x) => x.id !== id);
-            d.flashcards = d.flashcards.filter((c) => c.assessmentId !== id);
-            d.tests = d.tests.filter((t) => t.assessmentId !== id);
           }),
         setNotification: (id, n) =>
           mutate((d) => {
@@ -678,34 +654,6 @@ export const useData = create<DataState>()(
             d.mindmaps = d.mindmaps.filter((x) => x.id !== id);
           }),
 
-        // ── homework ──────────────────────────────────────
-        addHomework: (h) =>
-          mutate((d) => {
-            if (!d.homework) d.homework = [];
-            d.homework.unshift({
-              id: uid("hw"),
-              title: h.title,
-              subjectId: h.subjectId,
-              canvasId: h.canvasId,
-              done: h.done ?? false,
-              createdAt: Date.now(),
-            });
-          }),
-        toggleHomework: (id) =>
-          mutate((d) => {
-            const i = (d.homework || []).findIndex((x) => x.id === id);
-            if (i >= 0) d.homework[i].done = !d.homework[i].done;
-          }),
-        updateHomework: (id, patch) =>
-          mutate((d) => {
-            const i = (d.homework || []).findIndex((x) => x.id === id);
-            if (i >= 0) d.homework[i] = { ...d.homework[i], ...patch };
-          }),
-        deleteHomework: (id) =>
-          mutate((d) => {
-            d.homework = (d.homework || []).filter((x) => x.id !== id);
-          }),
-
         seedExample: () => {
           const existing = get().data();
           if (existing.subjects.length > 0) return;
@@ -727,7 +675,6 @@ export const useData = create<DataState>()(
 
         importFromCanvas: (payload) => {
           let subjectsAdded = 0;
-          let tasksAdded = 0;
           let assessmentsAdded = 0;
           let assessmentsUpdated = 0;
 
@@ -772,40 +719,6 @@ export const useData = create<DataState>()(
             // Finished work keeps its historical date; unfinished work drops
             // a long-stale one.
             const due = rawDue && (finished || !staleDue(rawDue)) ? rawDue : undefined;
-
-            // Day-to-day task (not formally assessed) → Homework, not an
-            // assessment. Runs automatically on every sync.
-            if (a.assessed === false) {
-              const done = !!(a.submitted || a.gradedAt != null || a.score != null);
-              const hw = (get().data().homework || []).find(
-                (h) => h.canvasId === a.canvasId
-              );
-              if (hw) {
-                get().updateHomework(hw.id, {
-                  title: a.name || hw.title,
-                  ...(done && !hw.done ? { done: true } : {}),
-                });
-              } else {
-                // Migrate a previously imported assessment — unless the user
-                // has generated materials on it (then their work wins).
-                const asExisting = get()
-                  .data()
-                  .assessments.find((x) => x.canvasId === a.canvasId && !x.deletedAt);
-                if (asExisting?.generated) {
-                  // keep as an assessment
-                } else {
-                  if (asExisting) get().purgeAssessment(asExisting.id);
-                  get().addHomework({
-                    title: a.name || "Task",
-                    subjectId: subject.id,
-                    canvasId: a.canvasId,
-                    done,
-                  });
-                  tasksAdded++;
-                }
-              }
-              continue;
-            }
 
             const hasBrief = !!(a.description && a.description.trim().length > 10);
             const brief = canvasBrief(a, due);
@@ -879,7 +792,7 @@ export const useData = create<DataState>()(
             }
           }
 
-          return { subjectsAdded, assessmentsAdded, assessmentsUpdated, tasksAdded };
+          return { subjectsAdded, assessmentsAdded, assessmentsUpdated };
         },
       };
     },

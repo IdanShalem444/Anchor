@@ -1,5 +1,3 @@
-import { classifyAssignments } from "./ai/server";
-
 export interface CanvasCreds {
   baseUrl: string;
   token: string;
@@ -40,73 +38,6 @@ export interface CanvasAssignment {
   rubric?: string;
   /** Canvas grading_type (e.g. "points", "not_graded"). */
   gradingType?: string;
-  /** Weighting (%) of the assignment group this belongs to, if the course
-   *  uses weighted grading categories (e.g. "Assessments 60%" vs "Classwork 0%"). */
-  groupWeight?: number;
-  /** Canvas assignment_group_id — used internally to look up groupWeight. */
-  assignmentGroupId?: number;
-  /** True when this is formally assessed work; false = a day-to-day task
-   *  (imported as homework, not an assessment). Set by syncCanvas. */
-  assessed?: boolean;
-  /** Which indicator(s) drove the assessed/task call — for logging/debugging. */
-  assessedReasons?: string[];
-}
-
-// ─────────────────────────────────────────────────────────────
-// Assessment vs. day-to-day task classification.
-//
-// This runs on every Canvas sync, for every assignment, so it has to stay
-// free and instant for the common case — only genuinely ambiguous items
-// (nothing below fires either way) fall through to a single batched AI call
-// covering the whole sync (see classifyAmbiguous in syncCanvas below).
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Ordered priority list of indicators — checked top to bottom, first match
- * wins. Order matters: strong, concrete Canvas-provided evidence goes first
- * (either direction), explicit task-language is checked BEFORE the weak
- * "has some points" signal so a small completion-tracking point value on a
- * "practice worksheet" doesn't wrongly outrank the word "practice" itself —
- * that exact false positive is what an earlier, flatter version of this list
- * got wrong. Nothing firing at all means genuinely ambiguous → AI tie-break.
- */
-const INDICATORS: { assessed: boolean; test: (a: CanvasAssignment) => boolean; reason: string }[] = [
-  // 1. Direct evidence it was actually marked — the strongest signal there is.
-  { assessed: true, test: (a) => a.score != null || !!(a.grade && a.grade !== ""), reason: "already graded (score/grade present)" },
-  { assessed: true, test: (a) => !!a.feedback?.length, reason: "teacher left feedback/comments" },
-  { assessed: true, test: (a) => !!a.rubric?.trim(), reason: "has a marking rubric" },
-  { assessed: true, test: (a) => (a.groupWeight ?? 0) > 0, reason: "belongs to a weighted assignment category (counts toward the grade)" },
-
-  // 2. Canvas's own structural signals that it explicitly does NOT count.
-  { assessed: false, test: (a) => a.gradingType === "not_graded", reason: "Canvas marks it as not graded" },
-  { assessed: false, test: (a) => (a.groupWeight ?? -1) === 0 && !(a.points ?? 0), reason: "in a 0%-weighted category with no points" },
-
-  // 3. Explicit language in the title/notification — checked task-language
-  //    first, so wording like "practice worksheet" wins over a stray points
-  //    value below (a completion-tracking point value doesn't make it a
-  //    formal assessment).
-  { assessed: false, test: (a) => /\b(homework|classwork|practice|worksheet|reading|revision|optional|for your own (benefit|learning)|not for marks|no need to submit)\b/i.test(`${a.name} ${a.description || ""}`), reason: "notification uses everyday-task language" },
-  { assessed: true, test: (a) => /\b(assessment|assessed|examination|exam|test|quiz|summative|marked|marking|graded|grading|rubric|criteri(a|on)|weighting|worth\s+\d+\s*%?|task\s*\d)\b/i.test(`${a.name} ${a.description || ""}`), reason: "notification/title uses formal-assessment language" },
-
-  // 4. Last resort before giving up: worth SOME marks and gradeable at all.
-  //    Weakest signal — many schools give small completion points to routine
-  //    homework, so this only fires once every stronger check above (and
-  //    every task-language check) has already failed to find anything.
-  { assessed: true, test: (a) => (a.points ?? 0) > 0 && a.gradingType !== "not_graded", reason: "worth marks and gradeable" },
-];
-
-/**
- * Classify one assignment against the indicator list above.
- * Returns `assessed: null` when nothing fires either way — genuinely
- * ambiguous, left for the AI tie-breaker (or a conservative default) rather
- * than guessed at here.
- */
-export function classifyAssessedIndicator(a: CanvasAssignment): {
-  assessed: boolean | null;
-  reasons: string[];
-} {
-  for (const i of INDICATORS) if (i.test(a)) return { assessed: i.assessed, reasons: [i.reason] };
-  return { assessed: null, reasons: [] };
 }
 
 /** Format a Canvas rubric (array of criteria) into readable marking criteria. */
@@ -271,27 +202,7 @@ export async function fetchAssignments(
     kind: classifyKind(x.name || "", x.submission_types || []),
     rubric: formatRubric(x.rubric),
     gradingType: x.grading_type || undefined,
-    assignmentGroupId: x.assignment_group_id ?? undefined,
   }));
-}
-
-/** Weighting (%) per assignment group, keyed by group id — a course that
- *  weights "Assessments" at 60% vs "Classwork" at 0% gives us a strong,
- *  otherwise-unused signal for the assessed/task split below. */
-async function fetchAssignmentGroupWeights(
-  creds: CanvasCreds,
-  courseId: number
-): Promise<Map<number, number>> {
-  const map = new Map<number, number>();
-  try {
-    const groups = await cget(creds, `/courses/${courseId}/assignment_groups?per_page=100`);
-    if (Array.isArray(groups)) {
-      for (const g of groups) map.set(g.id, Number(g.group_weight) || 0);
-    }
-  } catch {
-    // weighting not exposed on this course — the other indicators still apply
-  }
-  return map;
 }
 
 /** The student's own grades + feedback for a course, keyed by assignment id. */
@@ -427,11 +338,10 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
   await Promise.all(
     courses.map(async (c) => {
       try {
-        const [as, grades, outcomes, groupWeights] = await Promise.all([
+        const [as, grades, outcomes] = await Promise.all([
           fetchAssignments(creds, c.canvasId),
           fetchSubmissions(creds, c.canvasId),
           fetchOutcomes(creds, c.canvasId),
-          fetchAssignmentGroupWeights(creds, c.canvasId),
         ]);
         if (outcomes.length) c.outcomes = outcomes;
         for (const a of as) {
@@ -445,7 +355,6 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
             a.submittedAt = g.submittedAt;
             a.missing = g.missing;
           }
-          if (a.assignmentGroupId != null) a.groupWeight = groupWeights.get(a.assignmentGroupId) ?? 0;
         }
         assignments.push(...as);
       } catch {
@@ -453,59 +362,5 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
       }
     })
   );
-
-  // Run the free indicator-based classifier first (see classifyAssessedIndicator
-  // above for the full list). Only items where NOTHING fires either way — no
-  // grade, no rubric, no weighting, no telling keywords — go to a single
-  // batched AI call covering the whole sync, so cost stays flat regardless of
-  // how many assignments there are.
-  const ambiguous: CanvasAssignment[] = [];
-  for (const a of assignments) {
-    const { assessed, reasons } = classifyAssessedIndicator(a);
-    a.assessed = assessed ?? undefined;
-    a.assessedReasons = reasons;
-    if (assessed === null) ambiguous.push(a);
-  }
-  if (ambiguous.length > 0) {
-    try {
-      const decided = await classifyAmbiguous(ambiguous);
-      for (const a of ambiguous) {
-        a.assessed = decided.get(a.canvasId) ?? false; // conservative default: task
-        a.assessedReasons = [decided.has(a.canvasId) ? "AI tie-break (ambiguous case)" : "ambiguous — AI unavailable, defaulted to task"];
-      }
-    } catch (e) {
-      console.error("[canvas] AI tie-break failed, defaulting ambiguous items to task:", e);
-      for (const a of ambiguous) {
-        a.assessed = false;
-        a.assessedReasons = ["ambiguous — AI tie-break failed, defaulted to task"];
-      }
-    }
-    console.log(
-      `[canvas] classified ${assignments.length} assignment(s): ${ambiguous.length} were ambiguous, resolved via AI tie-break.`
-    );
-  }
-
   return { courses, assignments };
-}
-
-/**
- * Last-resort tie-break for assignments the indicator list couldn't call
- * either way. Batches ALL ambiguous items from one sync into a SINGLE model
- * call (cost stays flat no matter how many assignments a user has) and is
- * deliberately NOT metered against the user's plan — this is a background
- * sorting courtesy, not a content generation the user asked for.
- */
-async function classifyAmbiguous(items: CanvasAssignment[]): Promise<Map<number, boolean>> {
-  const payload = items.map((a) => ({
-    id: a.canvasId,
-    name: a.name,
-    points: a.points ?? null,
-    gradingType: a.gradingType,
-    groupWeight: a.groupWeight,
-    excerpt: (a.description || "").slice(0, 400),
-  }));
-  const result = await classifyAssignments(payload);
-  const map = new Map<number, boolean>();
-  for (const [id, assessed] of Object.entries(result)) map.set(Number(id), assessed);
-  return map;
 }
