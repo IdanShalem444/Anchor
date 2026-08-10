@@ -16,7 +16,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { useData } from "@/store/data";
-import { researchForSubject } from "@/lib/selectors";
 import { ai } from "@/lib/ai";
 import { extractText, fileToDataUrl } from "@/lib/extract";
 import { uid } from "@/lib/format";
@@ -41,7 +40,7 @@ export function UploadNotification({
 }) {
   const setNotification = useData((s) => s.setNotification);
   const setGenerated = useData((s) => s.setGenerated);
-  const addFlashcards = useData((s) => s.addFlashcards);
+  const replaceAiFlashcards = useData((s) => s.replaceAiFlashcards);
   const updateAssessment = useData((s) => s.updateAssessment);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +54,14 @@ export function UploadNotification({
 
   const hasGenerated = !!assessment.generated;
   const showCompact = hasGenerated && !editing;
+
+  // A Canvas assignment with no real details — the teacher only gave a name, no
+  // description and no attached brief. Ask the student for the notification.
+  const noCanvasDetails =
+    !!assessment.canvasId &&
+    !hasGenerated &&
+    !(assessment.description && assessment.description.trim().length > 12) &&
+    !assessment.notification?.rawText?.includes("[Attached:");
 
   useEffect(() => {
     if (!busy) return;
@@ -142,20 +149,6 @@ export function UploadNotification({
             .join("\n")
       );
     }
-    // Fold in what the student researched in the in-app browser for this subject.
-    const research = researchForSubject(useData.getState().data(), subject.id).slice(0, 12);
-    if (research.length) {
-      syllabusCtx.push(
-        "Student's saved web research (use relevant facts in the notes/flashcards):\n" +
-          research
-            .map((r) =>
-              r.kind === "view"
-                ? `- ${r.title || r.url}${r.excerpt ? `: ${r.excerpt.slice(0, 600)}` : ""}`
-                : `- searched: "${r.query}"`
-            )
-            .join("\n")
-      );
-    }
     const aiText = syllabusCtx.length
       ? `${content}\n\n=== Course context (use to align materials to the real syllabus) ===\n${syllabusCtx.join("\n\n")}`
       : content;
@@ -174,8 +167,11 @@ export function UploadNotification({
         generatedAt: Date.now(),
         model: ai.name,
       });
-      // replace AI flashcards for this assessment
-      addFlashcards(
+      // Replace this assessment's AI flashcards with the new set (drops stale
+      // ones when a regenerate returns fewer — or none, e.g. an unwritten
+      // presentation). Manual cards survive.
+      replaceAiFlashcards(
+        assessment.id,
         result.flashcards.map((f) => ({
           subjectId: subject.id,
           assessmentId: assessment.id,
@@ -187,12 +183,17 @@ export function UploadNotification({
       if (assessment.progress < 25) updateAssessment(assessment.id, { progress: 25 });
       if (result.summary.dueDate && !assessment.dueDate)
         updateAssessment(assessment.id, { dueDate: result.summary.dueDate });
+      // Apply the AI's own read of the type, so the workspace shows the right tools.
+      if (result.kind && result.kind !== assessment.kind)
+        updateAssessment(assessment.id, { kind: result.kind });
       if (result.plan && result.plan.length && !assessment.steps?.length)
         updateAssessment(assessment.id, {
           steps: result.plan.map((t) => ({ id: uid(), text: t, done: false })),
         });
       setEditing(false);
       onGenerated?.();
+    } catch {
+      // Plan block (limit / locked) is handled by the global upgrade modal.
     } finally {
       setBusy(false);
     }
@@ -295,10 +296,24 @@ export function UploadNotification({
                 </div>
               </div>
 
-              {assessment.notification?.fileType === "canvas" && !hasGenerated && (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500/[0.08] px-4 py-2.5 text-[13px] text-emerald-700">
-                  <Check size={14} /> Found on Canvas — review the brief below and click generate.
+              {noCanvasDetails ? (
+                <div className="mt-4 flex items-start gap-2 rounded-2xl bg-amber-500/[0.1] px-4 py-3 text-[13px] text-amber-800">
+                  <FileType2 size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    Canvas didn&apos;t include any details for this assessment — just the
+                    name. <strong>Do you have the notification?</strong> If you have a sheet,
+                    doc or photo of it, add it above and Anchor will build proper study
+                    materials. (Generating from the name alone won&apos;t be much use.)
+                  </span>
                 </div>
+              ) : (
+                assessment.notification?.fileType === "canvas" &&
+                !hasGenerated && (
+                  <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500/[0.08] px-4 py-2.5 text-[13px] text-emerald-700">
+                    <Check size={14} /> Found on Canvas — review the brief below and click
+                    generate.
+                  </div>
+                )
               )}
 
               <div className="mt-6">

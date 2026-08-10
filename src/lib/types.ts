@@ -61,27 +61,17 @@ export interface Subject {
   deletedAt?: number | null;
 }
 
-/** A captured web search or viewed page from the in-app research browser. */
-export interface ResearchEntry {
-  id: string;
-  subjectId: string;
-  kind: "search" | "view";
-  /** Search query (kind = "search"). */
-  query?: string;
-  /** Page url + title (kind = "view"). */
-  url?: string;
-  title?: string;
-  /** Readable text excerpt captured from the page (kind = "view"). */
-  excerpt?: string;
-  at: number;
-}
-
 export type Priority = "low" | "medium" | "high";
 export type AssessmentStatus = "not-started" | "in-progress" | "completed";
 export type Term = "Term 1" | "Term 2" | "Term 3" | "Term 4";
 
 export interface AssessmentNotification {
   rawText: string;
+  /** Original Canvas description HTML (sanitized at render) — shown as-is in
+   *  the Notification tab. Absent for user-uploaded notifications. */
+  html?: string;
+  /** AI-tidied HTML of rawText (structure only, wording verbatim). */
+  aiHtml?: string;
   fileName?: string;
   fileType?: string;
   uploadedAt: number;
@@ -144,6 +134,8 @@ export interface Assessment {
   kind?: "study" | "project";
   /** Grade + teacher feedback synced from Canvas. */
   result?: AssessmentResult;
+  /** When the student submitted this online on Canvas (epoch ms), if they have. */
+  submittedAt?: number | null;
   /** Step-by-step breakdown for project/submission assessments. */
   steps?: AssessmentStep[];
   title: string;
@@ -276,6 +268,8 @@ export interface Note {
   title: string;
   body: string;
   kind: NoteKind;
+  /** Optional link to a school subject. */
+  subjectId?: string;
   scheduledFor?: string;
   tags: string[];
   pinned?: boolean;

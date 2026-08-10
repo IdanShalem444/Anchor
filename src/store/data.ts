@@ -21,7 +21,6 @@ import type {
   Project,
   Quote,
   Reminder,
-  ResearchEntry,
   Resource,
   Subject,
   SubjectType,
@@ -58,6 +57,7 @@ export interface CanvasImportPayload {
     name: string;
     dueAt?: string | null;
     description?: string;
+    descriptionHtml?: string;
     url?: string;
     points?: number | null;
     kind?: "study" | "project";
@@ -65,8 +65,19 @@ export interface CanvasImportPayload {
     grade?: string | null;
     feedback?: string[];
     gradedAt?: number | null;
+    submitted?: boolean;
+    submittedAt?: number | null;
     rubric?: string;
   }[];
+}
+
+/** A due date this long past on unfinished work is stale Canvas data (wrong
+ *  term / never updated) — drop it rather than show "52 days overdue" forever. */
+const STALE_DUE_DAYS = 50;
+function staleDue(iso?: string): boolean {
+  if (!iso) return false;
+  const t = new Date(`${iso}T23:59:59`).getTime();
+  return Number.isFinite(t) && Date.now() - t > STALE_DUE_DAYS * 86_400_000;
 }
 
 /** Compose an assessment notification/brief from a Canvas assignment. */
@@ -96,11 +107,9 @@ export interface UserData {
   notes: Note[];
   projects: Project[];
   mindmaps: MindMap[];
-  /** Captured web research (in-app browser), per subject. */
-  research: ResearchEntry[];
-  /** When true, searches + viewed pages are logged for the AI to use. */
-  researchCapture: boolean;
   streak: { count: number; lastActive: string | null };
+  /** Canvas assignment ids the user deleted — never re-imported on sync. */
+  deletedCanvasIds?: number[];
 }
 
 const emptyData = (): UserData => ({
@@ -116,9 +125,8 @@ const emptyData = (): UserData => ({
   notes: [],
   projects: [],
   mindmaps: [],
-  research: [],
-  researchCapture: false,
   streak: { count: 0, lastActive: null },
+  deletedCanvasIds: [],
 });
 
 /** Stable reference returned when the current user has no data bucket yet —
@@ -153,6 +161,11 @@ interface DataState {
 
   // flashcards
   addFlashcards: (cards: Omit<Flashcard, "id" | "createdAt" | "known">[]) => void;
+  /** Swap out the AI-generated cards for an assessment (manual cards survive). */
+  replaceAiFlashcards: (
+    assessmentId: string,
+    cards: Omit<Flashcard, "id" | "createdAt" | "known">[]
+  ) => void;
   addFlashcard: (c: Omit<Flashcard, "id" | "createdAt" | "known">) => void;
   updateFlashcard: (id: string, patch: Partial<Flashcard>) => void;
   deleteFlashcard: (id: string) => void;
@@ -204,11 +217,6 @@ interface DataState {
   createMap: (name: string) => MindMap;
   updateMap: (id: string, patch: Partial<MindMap>) => void;
   deleteMap: (id: string) => void;
-
-  // research (in-app browser)
-  setResearchCapture: (on: boolean) => void;
-  addResearchEntry: (e: Omit<ResearchEntry, "id" | "at">) => void;
-  clearResearch: (subjectId: string) => void;
 
   seedExample: () => void;
   importFromCanvas: (payload: CanvasImportPayload) => {
@@ -336,12 +344,24 @@ export const useData = create<DataState>()(
         trashAssessment: (id) =>
           mutate((d) => {
             const i = d.assessments.findIndex((x) => x.id === id);
-            if (i >= 0) d.assessments[i].deletedAt = Date.now();
+            if (i < 0) return;
+            d.assessments[i].deletedAt = Date.now();
+            // Remember Canvas-sourced deletions so a re-sync doesn't bring them back.
+            const cid = d.assessments[i].canvasId;
+            if (cid != null) {
+              if (!d.deletedCanvasIds) d.deletedCanvasIds = [];
+              if (!d.deletedCanvasIds.includes(cid)) d.deletedCanvasIds.push(cid);
+            }
           }),
         restoreAssessment: (id) =>
           mutate((d) => {
             const i = d.assessments.findIndex((x) => x.id === id);
-            if (i >= 0) d.assessments[i].deletedAt = null;
+            if (i < 0) return;
+            d.assessments[i].deletedAt = null;
+            const cid = d.assessments[i].canvasId;
+            if (cid != null && d.deletedCanvasIds) {
+              d.deletedCanvasIds = d.deletedCanvasIds.filter((x) => x !== cid);
+            }
           }),
         setNotification: (id, n) =>
           mutate((d) => {
@@ -365,6 +385,19 @@ export const useData = create<DataState>()(
         // ── flashcards ────────────────────────────────────
         addFlashcards: (cards) =>
           mutate((d) => {
+            for (const c of cards)
+              d.flashcards.push({
+                ...c,
+                id: uid("fc"),
+                createdAt: Date.now(),
+                known: false,
+              });
+          }),
+        replaceAiFlashcards: (assessmentId, cards) =>
+          mutate((d) => {
+            d.flashcards = d.flashcards.filter(
+              (c) => !(c.assessmentId === assessmentId && c.source === "ai")
+            );
             for (const c of cards)
               d.flashcards.push({
                 ...c,
@@ -621,33 +654,6 @@ export const useData = create<DataState>()(
             d.mindmaps = d.mindmaps.filter((x) => x.id !== id);
           }),
 
-        // ── research (in-app browser) ─────────────────────
-        setResearchCapture: (on) =>
-          mutate((d) => {
-            d.researchCapture = on;
-          }),
-        addResearchEntry: (e) =>
-          mutate((d) => {
-            if (!d.researchCapture) return;
-            if (!d.research) d.research = [];
-            // De-dupe a viewed page / repeated query within the same subject.
-            d.research = d.research.filter(
-              (r) =>
-                !(
-                  r.subjectId === e.subjectId &&
-                  r.kind === e.kind &&
-                  (e.kind === "view" ? r.url === e.url : r.query === e.query)
-                )
-            );
-            d.research.unshift({ ...e, id: uid("res"), at: Date.now() });
-            // Keep the log bounded per user.
-            if (d.research.length > 200) d.research = d.research.slice(0, 200);
-          }),
-        clearResearch: (subjectId) =>
-          mutate((d) => {
-            d.research = (d.research || []).filter((r) => r.subjectId !== subjectId);
-          }),
-
         seedExample: () => {
           const existing = get().data();
           if (existing.subjects.length > 0) return;
@@ -697,16 +703,28 @@ export const useData = create<DataState>()(
             }
           }
 
+          const deletedIds = new Set(get().data().deletedCanvasIds || []);
           for (const a of payload.assignments) {
+            if (deletedIds.has(a.canvasId)) continue; // user deleted it — stay gone
             const subject = get()
               .data()
               .subjects.find((s) => s.canvasCourseId === a.courseCanvasId && !s.deletedAt);
             if (!subject) continue;
-            const due = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+            const rawDue = a.dueAt ? a.dueAt.slice(0, 10) : undefined;
+            const finished =
+              a.gradedAt != null ||
+              a.score != null ||
+              (!!a.grade && a.grade !== "") ||
+              !!a.submitted;
+            // Finished work keeps its historical date; unfinished work drops
+            // a long-stale one.
+            const due = rawDue && (finished || !staleDue(rawDue)) ? rawDue : undefined;
+
             const hasBrief = !!(a.description && a.description.trim().length > 10);
             const brief = canvasBrief(a, due);
             const notification = {
               rawText: brief,
+              ...(a.descriptionHtml ? { html: a.descriptionHtml } : {}),
               fileName: `Canvas · ${subject.name}`,
               fileType: "canvas",
               uploadedAt: Date.now(),
@@ -722,21 +740,38 @@ export const useData = create<DataState>()(
                   gradedAt: a.gradedAt ?? Date.now(),
                 }
               : undefined;
-            const gradePatch = result
-              ? { result, status: "completed" as const, progress: 100 }
-              : {};
+            // Graded → completed (with the result). Submitted online but not yet
+            // graded → also mark completed, so handing in on Canvas clears it from
+            // your reminders/check-ins. Not submitted → leave the status alone.
+            const gradePatch = {
+              ...(result
+                ? { result, status: "completed" as const, progress: 100 }
+                : a.submitted
+                ? { status: "completed" as const, progress: 100 }
+                : {}),
+              ...(a.submittedAt != null ? { submittedAt: a.submittedAt } : {}),
+            };
             const existing = get().data().assessments.find((x) => x.canvasId === a.canvasId);
             if (existing) {
               get().updateAssessment(existing.id, {
                 title: a.name || existing.title,
-                dueDate: due ?? existing.dueDate,
+                // Also scrub a stale stored date off unfinished work.
+                dueDate:
+                  due ??
+                  (existing.status !== "completed" && staleDue(existing.dueDate)
+                    ? undefined
+                    : existing.dueDate),
                 description: a.description || existing.description,
                 kind: a.kind ?? existing.kind,
                 ...gradePatch,
               });
-              // Refresh the Canvas brief as the notification, unless materials
-              // were already generated (don't clobber the user's work).
-              if (hasBrief && !existing.generated) {
+              // Refresh the Canvas brief as the notification. Safe when the
+              // current notification is Canvas-sourced (or missing) — it only
+              // replaces the brief, never generated materials. A user-UPLOADED
+              // notification on a generated assessment is left alone.
+              const notifIsOurs =
+                !existing.notification || existing.notification.fileType === "canvas";
+              if (hasBrief && (!existing.generated || notifIsOurs)) {
                 get().setNotification(existing.id, notification);
               }
               assessmentsUpdated++;

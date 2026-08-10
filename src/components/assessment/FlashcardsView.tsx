@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -10,6 +10,9 @@ import {
   Trash2,
   Sparkles,
   Layers,
+  Play,
+  Pause,
+  TimerReset,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -28,14 +31,17 @@ export function FlashcardsView({
   assessment?: Assessment;
 }) {
   const [mode, setMode] = useState<"study" | "manage">("study");
+  const isProject = (assessment?.kind ?? "study") === "project";
 
   if (cards.length === 0) {
     return (
       <EmptyState
         icon={Layers}
-        title="No flashcards yet"
+        title={isProject ? "No cue cards yet" : "No flashcards yet"}
         description={
-          assessment
+          isProject
+            ? "Write your talk first — then paste the draft here and Anchor turns it into spoken cue cards you can rehearse with."
+            : assessment
             ? "Upload the assessment notification to auto-generate flashcards, or add your own below."
             : "Flashcards generated from your assessments will appear here."
         }
@@ -76,6 +82,16 @@ function StudyMode({ cards }: { cards: Flashcard[] }) {
   const [pos, setPos] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
+  // Rehearsal timer — time yourself flipping through cue cards / a talk.
+  const [seconds, setSeconds] = useState(0);
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
   const idx = order[Math.min(pos, order.length - 1)] ?? 0;
   const card = cards[idx];
   const known = cards.filter((c) => c.known).length;
@@ -98,7 +114,29 @@ function StudyMode({ cards }: { cards: Flashcard[] }) {
         <span>
           Card {pos + 1} of {cards.length}
         </span>
-        <span>{known} mastered</span>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2 py-1 tabular-nums">
+            <button
+              onClick={() => setRunning((r) => !r)}
+              className="text-ink-soft hover:text-ink"
+              title={running ? "Pause" : "Rehearse — start the timer"}
+            >
+              {running ? <Pause size={13} /> : <Play size={13} />}
+            </button>
+            <span className="font-medium text-ink">{clock}</span>
+            <button
+              onClick={() => {
+                setSeconds(0);
+                setRunning(false);
+              }}
+              className="text-ink-faint hover:text-ink"
+              title="Reset timer"
+            >
+              <TimerReset size={13} />
+            </button>
+          </div>
+          <span>{known} mastered</span>
+        </div>
       </div>
       <ProgressBar value={(known / cards.length) * 100} className="mb-4" />
       <div className="relative h-64 [perspective:1600px]">
@@ -202,7 +240,10 @@ function AddAndGenerate({
 }) {
   const addFlashcard = useData((s) => s.addFlashcard);
   const addFlashcards = useData((s) => s.addFlashcards);
+  const isProject = (assessment.kind ?? "study") === "project";
   const [open, setOpen] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draft, setDraft] = useState("");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [busy, setBusy] = useState(false);
@@ -210,35 +251,110 @@ function AddAndGenerate({
   async function generateMore() {
     if (!assessment.notification?.rawText) return;
     setBusy(true);
-    const more = await ai.generateFlashcards({
-      subjectType: subject.type,
-      subjectName: subject.name,
-      assessmentTitle: assessment.title,
-      text: assessment.notification.rawText,
-      count: 6,
-    });
-    addFlashcards(
-      more.map((f) => ({
-        subjectId: subject.id,
-        assessmentId: assessment.id,
-        front: f.front,
-        back: f.back,
-        source: "ai" as const,
-      }))
-    );
-    setBusy(false);
+    try {
+      const more = await ai.generateFlashcards({
+        subjectType: subject.type,
+        subjectName: subject.name,
+        assessmentTitle: assessment.title,
+        text: assessment.notification.rawText,
+        count: 6,
+      });
+      addFlashcards(
+        more.map((f) => ({
+          subjectId: subject.id,
+          assessmentId: assessment.id,
+          front: f.front,
+          back: f.back,
+          source: "ai" as const,
+        }))
+      );
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Projects/presentations: cue cards come from the student's OWN drafted talk,
+  // never from the task notification (that only produces junk about the task).
+  async function generateFromDraft() {
+    if (!draft.trim()) return;
+    setBusy(true);
+    try {
+      const more = await ai.generateFlashcards({
+        subjectType: subject.type,
+        subjectName: subject.name,
+        assessmentTitle: assessment.title,
+        text: draft.trim(),
+        count: 10,
+        style: "cuecards",
+      });
+      addFlashcards(
+        more.map((f) => ({
+          subjectId: subject.id,
+          assessmentId: assessment.id,
+          front: f.front,
+          back: f.back,
+          source: "ai" as const,
+        }))
+      );
+      setDraftOpen(false);
+      setDraft("");
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div className={compact ? "flex gap-2" : "flex flex-wrap justify-center gap-2"}>
-      {assessment.notification?.rawText && (
-        <Button size="sm" variant="secondary" onClick={generateMore} disabled={busy}>
-          <Sparkles size={14} /> {busy ? "Generating…" : "Generate more"}
+      {isProject ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setDraftOpen((v) => !v)}
+          disabled={busy}
+        >
+          <Sparkles size={14} /> Cue cards from my draft
         </Button>
+      ) : (
+        assessment.notification?.rawText && (
+          <Button size="sm" variant="secondary" onClick={generateMore} disabled={busy}>
+            <Sparkles size={14} /> {busy ? "Generating…" : "Generate more"}
+          </Button>
+        )
       )}
       <Button size="sm" variant={compact ? "ghost" : "primary"} onClick={() => setOpen((v) => !v)}>
         <Plus size={14} /> Add card
       </Button>
+      {draftOpen && (
+        <div className="mt-2 w-full rounded-3xl border border-black/[0.06] bg-white/70 p-4">
+          <p className="mb-2 text-[13px] text-ink-muted">
+            Paste your talk — script, outline or slide notes. Anchor turns it into
+            spoken cue cards (section title on the front, talking points on the back).
+          </p>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Paste your pitch / talk draft here…"
+            className="min-h-[140px]"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDraftOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!draft.trim() || busy}
+              onClick={generateFromDraft}
+            >
+              <Sparkles size={14} /> {busy ? "Generating…" : "Make cue cards"}
+            </Button>
+          </div>
+        </div>
+      )}
       {open && (
         <div className="mt-2 w-full rounded-3xl border border-black/[0.06] bg-white/70 p-4">
           <Input

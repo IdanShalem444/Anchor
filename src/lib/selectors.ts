@@ -1,13 +1,6 @@
-import type { Assessment, Reminder, ResearchEntry, Subject } from "@/lib/types";
+import type { Assessment, Reminder, Subject } from "@/lib/types";
 import type { UserData } from "@/store/data";
 import { daysUntil, isThisWeek } from "@/lib/format";
-
-export function researchForSubject(d: UserData, subjectId?: string): ResearchEntry[] {
-  if (!subjectId) return [];
-  return (d.research || [])
-    .filter((r) => r.subjectId === subjectId)
-    .sort((a, b) => b.at - a.at);
-}
 
 export function activeSubjects(d: UserData): Subject[] {
   return d.subjects.filter((s) => !s.deletedAt);
@@ -72,6 +65,26 @@ export function assessmentsNeedingCheckIn(d: UserData): Assessment[] {
       if (a.status === "completed" || !a.dueDate) return false;
       const du = daysUntil(a.dueDate);
       return du !== null && du <= 0 && du >= -14;
+    })
+    .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
+}
+
+/**
+ * Canvas assessments that have NO real notification/details (the teacher only
+ * gave a name, no description or attached brief) and are due in ~1–3 weeks — so
+ * we can ask the student to add the notification while there's still time.
+ */
+export function assessmentsNeedingNotification(d: UserData): Assessment[] {
+  return activeAssessments(d)
+    .filter((a) => {
+      if (!a.canvasId || a.generated || !a.dueDate) return false;
+      if (a.status === "completed") return false; // already submitted / done
+      const du = daysUntil(a.dueDate);
+      // any upcoming assessment within ~5 weeks (incl. due soon), not past
+      if (du === null || du < 0 || du > 35) return false;
+      const hasDescription = !!(a.description && a.description.trim().length > 12);
+      const hasAttachedBrief = !!a.notification?.rawText?.includes("[Attached:");
+      return !hasDescription && !hasAttachedBrief;
     })
     .sort((a, b) => (a.dueDate! < b.dueDate! ? -1 : 1));
 }

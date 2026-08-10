@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-/** The Anchor mark — a clean, minimalist anchor in the brand orange. */
+/** The Anchor mark — three radiating right-facing ripple arcs, in coral. */
 export function AnchorMark({
   className,
   size = 24,
@@ -15,25 +15,24 @@ export function AnchorMark({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.2}
+      strokeWidth={2.3}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn("text-anchor", className)}
       aria-hidden="true"
     >
-      {/* radiating concentric arcs (ripple) + centre dot */}
-      <circle cx="4.5" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <path d="M4.5 8 A4 4 0 0 1 4.5 16" />
-      <path d="M4.5 4.5 A7.5 7.5 0 0 1 4.5 19.5" />
-      <path d="M4.5 1 A11 11 0 0 1 4.5 23" />
+      {/* concentric ripple arcs emanating to the right */}
+      <path d="M6 8.5 A3.5 3.5 0 0 1 6 15.5" />
+      <path d="M6 5 A7 7 0 0 1 6 19" />
+      <path d="M6 1.5 A10.5 10.5 0 0 1 6 22.5" />
     </svg>
   );
 }
 
-/** Full lockup: mark + wordmark. */
+/** Full lockup: mark + lowercase "anchor" wordmark, both in the brand coral. */
 export function AnchorLogo({
   className,
-  size = 22,
+  size = 24,
   showWord = true,
 }: {
   className?: string;
@@ -42,12 +41,13 @@ export function AnchorLogo({
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70 shadow-soft ring-1 ring-black/[0.04]">
-        <AnchorMark size={size} />
-      </span>
+      <AnchorMark size={size} />
       {showWord && (
-        <span className="text-[17px] font-semibold tracking-tight text-ink">
-          Anchor
+        <span
+          className="font-rounded font-semibold leading-none text-anchor"
+          style={{ fontSize: Math.round(size * 0.92), letterSpacing: "-0.01em" }}
+        >
+          anchor
         </span>
       )}
     </span>

@@ -44,11 +44,9 @@ export function NavBar() {
             href="/dashboard"
             className="flex shrink-0 items-center gap-2 rounded-full px-2 py-1 transition-transform hover:scale-[1.03]"
           >
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-white/70 ring-1 ring-black/[0.04]">
-              <AnchorMark size={18} />
-            </span>
-            <span className="hidden text-[15px] font-semibold tracking-tight sm:block">
-              Anchor
+            <AnchorMark size={22} />
+            <span className="font-rounded hidden text-[17px] font-semibold leading-none tracking-tight text-anchor sm:block">
+              anchor
             </span>
           </Link>
 

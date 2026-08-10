@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Search,
@@ -9,17 +9,39 @@ import {
   RotateCcw,
   Pin,
   CalendarClock,
+  Bold,
+  Italic,
+  Underline,
+  Highlighter,
+  List,
+  Eraser,
+  Sparkles,
+  Loader2,
+  Lock,
 } from "lucide-react";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { promptFeature } from "@/lib/billing/prompt";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, SegmentedControl } from "@/components/ui/misc";
 import { useData } from "@/store/data";
+import { ai } from "@/lib/ai";
+import { activeSubjects, subjectById } from "@/lib/selectors";
 import { useQueryParam } from "@/lib/hooks";
 import { relativeTime, formatShort } from "@/lib/format";
 import type { Note, NoteKind } from "@/lib/types";
 import { cn } from "@/lib/cn";
+
+/** Plain-text view of a note body (which may contain rich-text HTML). */
+function plain(html: string): string {
+  if (!html) return "";
+  if (typeof document === "undefined") return html.replace(/<[^>]+>/g, " ");
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  return (el.textContent || "").replace(/\s+/g, " ").trim();
+}
 
 export default function NotesPage() {
   const d = useData((s) => s.data());
@@ -39,7 +61,9 @@ export default function NotesPage() {
         .filter((n) => !n.deletedAt)
         .filter((n) =>
           query
-            ? `${n.title} ${n.body} ${n.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())
+            ? `${n.title} ${plain(n.body)} ${n.tags.join(" ")}`
+                .toLowerCase()
+                .includes(query.toLowerCase())
             : true
         )
         .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt),
@@ -120,13 +144,23 @@ export default function NotesPage() {
                     )}
                   >
                     <div className="flex items-center gap-1.5">
-                      {n.pinned && <Pin size={11} className="text-anchor" />}
+                      {n.pinned && <Pin size={11} className="shrink-0 text-anchor" />}
                       <span className="truncate text-[13.5px] font-medium text-ink">
                         {n.title || "Untitled"}
                       </span>
+                      {(() => {
+                        const subj = subjectById(d, n.subjectId);
+                        return subj ? (
+                          <span
+                            className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ background: subj.color }}
+                            title={subj.name}
+                          />
+                        ) : null;
+                      })()}
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-ink-muted">
-                      {n.body || "No content"}
+                      {plain(n.body) || "No content"}
                     </p>
                   </button>
                 ))
@@ -182,11 +216,45 @@ export default function NotesPage() {
 function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
   const update = useData((s) => s.updateNote);
   const trash = useData((s) => s.trashNote);
+  const subjects = useData((s) => activeSubjects(s.data()));
   const [title, setTitle] = useState(note.title);
-  const [body, setBody] = useState(note.body);
   const [tags, setTags] = useState(note.tags.join(", "));
+  const [improving, setImproving] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const ent = useEntitlements();
+  const canImprove = ent.can("noteImprover");
 
   const setKind = (kind: NoteKind) => update(note.id, { kind });
+
+  // AI clean-up: rewrite the note for structure + clarity (returns HTML).
+  const improve = async () => {
+    const el = editorRef.current;
+    const content = (el?.innerText || "").trim();
+    if (!content || improving) return;
+    setImproving(true);
+    try {
+      const html = await ai.improveNote(content);
+      if (html && editorRef.current) {
+        editorRef.current.innerHTML = html;
+        saveBody();
+      }
+    } catch {
+      // leave the note untouched on failure
+    } finally {
+      setImproving(false);
+    }
+  };
+
+  const saveBody = () => {
+    if (editorRef.current) update(note.id, { body: editorRef.current.innerHTML });
+  };
+  // Apply a rich-text command to the current selection, then persist.
+  const exec = (command: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand(command, false, value);
+    saveBody();
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -242,19 +310,92 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => update(note.id, { title })}
         placeholder="Title"
+        spellCheck
         className="mt-4 w-full bg-transparent text-2xl font-semibold tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"
       />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onBlur={() => update(note.id, { body })}
-        placeholder="Start writing…"
-        className="mt-3 min-h-[300px] flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-ink-soft placeholder:text-ink-faint focus:outline-none"
+
+      {/* formatting toolbar */}
+      <div className="mt-3 flex flex-wrap items-center gap-1 border-b border-black/[0.06] pb-2">
+        <ToolBtn label="Bold" onClick={() => exec("bold")}>
+          <Bold size={15} />
+        </ToolBtn>
+        <ToolBtn label="Italic" onClick={() => exec("italic")}>
+          <Italic size={15} />
+        </ToolBtn>
+        <ToolBtn label="Underline" onClick={() => exec("underline")}>
+          <Underline size={15} />
+        </ToolBtn>
+        <ToolBtn label="Highlight" onClick={() => exec("hiliteColor", "#fde68a")}>
+          <Highlighter size={15} />
+        </ToolBtn>
+        <span className="mx-1 h-5 w-px bg-black/10" />
+        {/* text size */}
+        <ToolBtn label="Small text" onClick={() => exec("fontSize", "2")}>
+          <span className="text-[11px] font-semibold">A</span>
+        </ToolBtn>
+        <ToolBtn label="Normal text" onClick={() => exec("fontSize", "4")}>
+          <span className="text-[14px] font-semibold">A</span>
+        </ToolBtn>
+        <ToolBtn label="Large text" onClick={() => exec("fontSize", "6")}>
+          <span className="text-[18px] font-semibold leading-none">A</span>
+        </ToolBtn>
+        <span className="mx-1 h-5 w-px bg-black/10" />
+        <ToolBtn label="Bulleted list" onClick={() => exec("insertUnorderedList")}>
+          <List size={15} />
+        </ToolBtn>
+        <ToolBtn label="Clear formatting" onClick={() => exec("removeFormat")}>
+          <Eraser size={15} />
+        </ToolBtn>
+        <button
+          type="button"
+          onClick={() => (canImprove ? improve() : promptFeature("noteImprover", ent.plan))}
+          disabled={improving}
+          title={
+            canImprove
+              ? "Rewrite this note for clarity and structure"
+              : "Improve with AI is a Basic feature — upgrade to unlock"
+          }
+          className="ml-auto flex h-8 items-center gap-1.5 rounded-lg bg-anchor/10 px-2.5 text-[12.5px] font-medium text-anchor transition-colors hover:bg-anchor/15 disabled:opacity-50"
+        >
+          {improving ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : canImprove ? (
+            <Sparkles size={14} />
+          ) : (
+            <Lock size={13} />
+          )}
+          {improving ? "Improving…" : "Improve with AI"}
+        </button>
+      </div>
+
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck
+        onBlur={saveBody}
+        data-placeholder="Start writing…"
+        dangerouslySetInnerHTML={{ __html: note.body }}
+        className="note-editor mt-3 min-h-[300px] flex-1 overflow-y-auto whitespace-pre-wrap bg-transparent text-[15px] leading-relaxed text-ink-soft focus:outline-none"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-3">
+        <select
+          value={note.subjectId ?? ""}
+          onChange={(e) => update(note.id, { subjectId: e.target.value || undefined })}
+          title="Link this note to a subject"
+          className="h-9 rounded-xl border border-black/[0.06] bg-white/70 px-2.5 text-[13px] text-ink shadow-inset focus:border-anchor/30 focus:outline-none"
+        >
+          <option value="">No subject</option>
+          {subjects.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
         <Input
           value={tags}
+          spellCheck={false}
           onChange={(e) => setTags(e.target.value)}
           onBlur={() =>
             update(note.id, {
@@ -270,5 +411,29 @@ function NoteEditor({ note, onTrash }: { note: Note; onTrash: () => void }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function ToolBtn({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      // Keep the editor's text selection when the toolbar is clicked.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className="grid h-8 min-w-[32px] place-items-center rounded-lg px-1.5 text-ink-soft transition-colors hover:bg-black/[0.06] hover:text-ink"
+    >
+      {children}
+    </button>
   );
 }

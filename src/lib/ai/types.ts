@@ -18,6 +18,8 @@ export interface AnalyzeInput {
 }
 
 export interface AnalyzeResult {
+  /** The AI's own read of the assessment type, used to tailor + relabel it. */
+  kind?: "study" | "project";
   summary: AssessmentSummary;
   notes: StudyNote[];
   revision: RevisionHub;
@@ -35,8 +37,6 @@ export interface ChatContext {
   /** Course syllabus + learning outcomes (from Canvas), to ground answers. */
   syllabus?: string;
   outcomes?: { title: string; description: string }[];
-  /** Web research the student captured for this subject (in-app browser). */
-  research?: { query?: string; title?: string; excerpt?: string }[];
   /** The student's assessments (for "what's next / due / my grades" questions). */
   assessments?: {
     title: string;
@@ -54,10 +54,14 @@ export interface AIProvider {
     input: AnalyzeInput & { difficulty: Difficulty; count?: number }
   ): Promise<{ title: string; questions: TestQuestion[] }>;
   generateFlashcards(
-    input: AnalyzeInput & { count?: number }
+    input: AnalyzeInput & { count?: number; style?: "cuecards" }
   ): Promise<{ front: string; back: string }[]>;
   chat(input: {
     messages: { role: "user" | "assistant"; content: string }[];
     context: ChatContext;
   }): Promise<string>;
+  /** Rewrite note text for structure + clarity; returns clean minimal HTML. */
+  improveNote(text: string): Promise<string>;
+  /** Reformat a notification into clean HTML WITHOUT changing any wording. */
+  formatNotification(text: string): Promise<string>;
 }

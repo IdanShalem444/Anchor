@@ -453,6 +453,7 @@ export class MockAIProvider implements AIProvider {
       .map((r) => `Be able to ${r.toLowerCase().replace(/^(you (will|are to) )/, "").replace(/\.$/, "")}`);
 
     return {
+      kind: input.kind,
       summary: {
         overview,
         requirements: reqs.length
@@ -601,5 +602,56 @@ export class MockAIProvider implements AIProvider {
         ? "I'm using your uploaded notification as context, so feel free to go deeper."
         : "Link a subject and assessment for sharper, tailored help."
     }`;
+  }
+
+  async improveNote(text: string): Promise<string> {
+    await delay(400);
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const blocks = text
+      .replace(/<[^>]+>/g, " ")
+      .split(/\n{2,}/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (blocks.length === 0) return "";
+    return blocks
+      .map((b) => {
+        const ls = b.split(/\n/).map((l) => l.trim()).filter(Boolean);
+        if (ls.length > 1 && ls.every((l) => /^[-*•]/.test(l))) {
+          return (
+            "<ul>" +
+            ls.map((l) => `<li>${esc(l.replace(/^[-*•]\s?/, ""))}</li>`).join("") +
+            "</ul>"
+          );
+        }
+        return `<p>${esc(b.replace(/\n/g, " "))}</p>`;
+      })
+      .join("");
+  }
+
+  /** Offline formatter — structure only, every word kept verbatim. */
+  async formatNotification(text: string): Promise<string> {
+    await delay(200);
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const blocks = text
+      .split(/\n{2,}/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (blocks.length === 0) return "";
+    return blocks
+      .map((b) => {
+        const ls = b.split(/\n/).map((l) => l.trim()).filter(Boolean);
+        if (ls.length > 1 && ls.every((l) => /^[-*•]/.test(l))) {
+          return (
+            "<ul>" +
+            ls.map((l) => `<li>${esc(l.replace(/^[-*•]\s?/, ""))}</li>`).join("") +
+            "</ul>"
+          );
+        }
+        // keep original line breaks — this is formatting, not rewriting
+        return `<p>${ls.map(esc).join("<br/>")}</p>`;
+      })
+      .join("");
   }
 }

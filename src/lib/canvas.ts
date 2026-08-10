@@ -20,6 +20,8 @@ export interface CanvasAssignment {
   name: string;
   dueAt?: string | null;
   description?: string;
+  /** The original Canvas description HTML, unstripped (for display as-is). */
+  descriptionHtml?: string;
   url?: string;
   points?: number | null;
   kind?: "study" | "project";
@@ -27,8 +29,15 @@ export interface CanvasAssignment {
   grade?: string | null;
   feedback?: string[];
   gradedAt?: number | null;
+  /** Whether the student has submitted this online (Canvas submitted_at is set). */
+  submitted?: boolean;
+  submittedAt?: number | null;
+  /** Past due and not submitted. */
+  missing?: boolean;
   /** Formatted marking rubric / criteria, if the assignment has one. */
   rubric?: string;
+  /** Canvas grading_type (e.g. "points", "not_graded"). */
+  gradingType?: string;
 }
 
 /** Format a Canvas rubric (array of criteria) into readable marking criteria. */
@@ -83,6 +92,36 @@ function stripHtml(html?: string | null): string {
     .slice(0, 6000);
 }
 
+/** Error that knows it came from Canvas (carries the HTTP status). */
+export class CanvasError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = "CanvasError";
+  }
+}
+
+/**
+ * Accept whatever the user pastes for their Canvas URL and return a clean origin:
+ *   "emanuel.instructure.com"            → "https://emanuel.instructure.com"
+ *   "https://emanuel.instructure.com/"   → "https://emanuel.instructure.com"
+ *   "https://emanuel.instructure.com/courses/123" → "https://emanuel.instructure.com"
+ * Returns "" if it can't be parsed.
+ */
+export function normalizeBaseUrl(input: string): string {
+  let s = String(input || "").trim();
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "";
+  }
+}
+
 async function cget(creds: CanvasCreds, path: string) {
   const res = await fetch(`${creds.baseUrl}/api/v1${path}`, {
     headers: { Authorization: `Bearer ${creds.token}` },
@@ -90,7 +129,7 @@ async function cget(creds: CanvasCreds, path: string) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Canvas ${res.status} on ${path}: ${body.slice(0, 200)}`);
+    throw new CanvasError(res.status, `Canvas ${res.status} on ${path}: ${body.slice(0, 200)}`);
   }
   return res.json();
 }
@@ -157,10 +196,12 @@ export async function fetchAssignments(
     name: x.name || "Assignment",
     dueAt: x.due_at,
     description: stripHtml(x.description),
+    descriptionHtml: typeof x.description === "string" && x.description.trim() ? x.description : undefined,
     url: x.html_url,
     points: x.points_possible ?? null,
     kind: classifyKind(x.name || "", x.submission_types || []),
     rubric: formatRubric(x.rubric),
+    gradingType: x.grading_type || undefined,
   }));
 }
 
@@ -168,7 +209,15 @@ export async function fetchAssignments(
 async function fetchSubmissions(creds: CanvasCreds, courseId: number) {
   const map = new Map<
     number,
-    { score: number | null; grade: string | null; feedback: string[]; gradedAt: number | null }
+    {
+      score: number | null;
+      grade: string | null;
+      feedback: string[];
+      gradedAt: number | null;
+      submitted: boolean;
+      submittedAt: number | null;
+      missing: boolean;
+    }
   >();
   try {
     const subs = await cget(
@@ -184,6 +233,10 @@ async function fetchSubmissions(creds: CanvasCreds, courseId: number) {
             ? s.submission_comments.map((c: any) => c.comment).filter(Boolean)
             : [],
           gradedAt: s.graded_at ? Date.parse(s.graded_at) : null,
+          // submitted_at is set the moment the student hands in online.
+          submitted: !!s.submitted_at,
+          submittedAt: s.submitted_at ? Date.parse(s.submitted_at) : null,
+          missing: !!s.missing,
         });
       }
     }
@@ -298,6 +351,9 @@ export async function syncCanvas(creds: CanvasCreds): Promise<{
             a.grade = g.grade;
             a.feedback = g.feedback;
             a.gradedAt = g.gradedAt;
+            a.submitted = g.submitted;
+            a.submittedAt = g.submittedAt;
+            a.missing = g.missing;
           }
         }
         assignments.push(...as);

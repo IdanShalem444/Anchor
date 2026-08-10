@@ -9,7 +9,7 @@ import { ProgressRing, EmptyState } from "@/components/ui/misc";
 import { Button } from "@/components/ui/Button";
 import { useData } from "@/store/data";
 import { activeSubjects, assessmentsFor, readiness } from "@/lib/selectors";
-import { dueLabel } from "@/lib/format";
+import { statusDueLabel } from "@/lib/format";
 
 export default function AssessmentsPage() {
   const d = useData((s) => s.data());
@@ -73,7 +73,7 @@ export default function AssessmentsPage() {
                                 {a.generated && <Sparkles size={13} className="text-anchor" />}
                               </div>
                               <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-ink-muted">
-                                <Clock size={12} /> {dueLabel(a.dueDate)}
+                                <Clock size={12} /> {statusDueLabel(a.dueDate, a.status === "completed")}
                               </p>
                             </div>
                           </GlassCard>

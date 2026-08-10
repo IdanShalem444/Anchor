@@ -69,6 +69,14 @@ export function dueLabel(iso?: string | null) {
   return `Due ${formatShort(iso)}`;
 }
 
+/** Due label for something that may already be done — "overdue" is only ever
+ *  a warning about work still outstanding, so completed work just shows the
+ *  plain date (or nothing) instead of a scary "135d overdue". */
+export function statusDueLabel(iso: string | null | undefined, completed: boolean) {
+  if (completed) return iso ? `Due ${formatShort(iso)}` : "Completed";
+  return dueLabel(iso);
+}
+
 export function isThisWeek(iso?: string | null) {
   const n = daysUntil(iso);
   return n !== null && n >= 0 && n <= 7;

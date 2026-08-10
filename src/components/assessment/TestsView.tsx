@@ -45,23 +45,28 @@ export function TestsView({
   async function generate() {
     if (!subject || !assessment) return;
     setBusy(true);
-    const t = await ai.generateTest({
-      subjectType: subject.type,
-      subjectName: subject.name,
-      assessmentTitle: assessment.title,
-      text: assessment.notification?.rawText || assessment.title,
-      difficulty,
-    });
-    const created = addTest({
-      subjectId: subject.id,
-      assessmentId: assessment.id,
-      title: t.title,
-      difficulty,
-      questions: t.questions,
-      lastScore: null,
-    });
-    setBusy(false);
-    setTakingId(created.id);
+    try {
+      const t = await ai.generateTest({
+        subjectType: subject.type,
+        subjectName: subject.name,
+        assessmentTitle: assessment.title,
+        text: assessment.notification?.rawText || assessment.title,
+        difficulty,
+      });
+      const created = addTest({
+        subjectId: subject.id,
+        assessmentId: assessment.id,
+        title: t.title,
+        difficulty,
+        questions: t.questions,
+        lastScore: null,
+      });
+      setTakingId(created.id);
+    } catch {
+      // Plan block (limit / locked) is handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
   }
 
   const taking = tests.find((t) => t.id === takingId);

@@ -31,14 +31,17 @@ import { Input, Select } from "@/components/ui/Input";
 import { EmptyState, ProgressBar } from "@/components/ui/misc";
 import { UploadNotification } from "@/components/assessment/UploadNotification";
 import { FlashcardsView } from "@/components/assessment/FlashcardsView";
+import { RehearseView } from "@/components/assessment/RehearseView";
 import { TestsView } from "@/components/assessment/TestsView";
 import { EssayTools } from "@/components/assessment/EssayTools";
 import { ChatView } from "@/components/chat/ChatView";
 import { useData } from "@/store/data";
+import { ai } from "@/lib/ai";
 import { subjectById, assessmentById, readiness } from "@/lib/selectors";
+import { sanitizeCanvasHtml } from "@/lib/sanitizeHtml";
 import { SUBJECT_ICON } from "@/lib/subjectMeta";
 import { subjectFeatures } from "@/lib/subjectMeta";
-import { dueLabel } from "@/lib/format";
+import { statusDueLabel } from "@/lib/format";
 import { uid } from "@/lib/format";
 import { useQueryParam } from "@/lib/hooks";
 import type { Assessment, Priority, Subject, Term } from "@/lib/types";
@@ -46,6 +49,7 @@ import { cn } from "@/lib/cn";
 
 type TabKey =
   | "summary"
+  | "notification"
   | "plan"
   | "notes"
   | "revision"
@@ -70,6 +74,7 @@ export default function AssessmentWorkspace({
   useEffect(() => {
     const allowed: TabKey[] = [
       "summary",
+      "notification",
       "plan",
       "notes",
       "revision",
@@ -104,21 +109,51 @@ export default function AssessmentWorkspace({
   const tests = d.tests.filter((t) => t.assessmentId === assessment.id);
   const generated = assessment.generated;
 
+  // A project is produced, not memorised — study tabs (revision / flashcards /
+  // tests) only appear when they actually hold content, e.g. cue cards + a
+  // rehearsal plan for a presentation, and get labels to match.
+  const isProject = (assessment.kind ?? "study") === "project";
+  const rev = generated?.revision;
+  const hasRevisionContent = !!(
+    rev &&
+    (rev.guide.trim() ||
+      rev.practiceQuestions.length ||
+      rev.examQuestions.length ||
+      rev.commonMistakes.length ||
+      rev.misconceptions.length ||
+      rev.extras.length)
+  );
+
   const tabs: { key: TabKey; label: string; icon: typeof FileText }[] = [
     { key: "summary", label: "Summary", icon: Sparkles },
-    ...(assessment.kind === "project" || assessment.steps?.length
+    ...(assessment.notification
+      ? [{ key: "notification" as TabKey, label: "Notification", icon: FileText }]
+      : []),
+    ...(isProject || assessment.steps?.length
       ? [{ key: "plan" as TabKey, label: "Plan", icon: ListChecks }]
       : []),
-    { key: "notes", label: "Study notes", icon: NotebookPen },
-    { key: "revision", label: "Revision", icon: BookOpen },
-    { key: "flashcards", label: "Flashcards", icon: Layers },
-    { key: "tests", label: "Tests", icon: ClipboardCheck },
+    ...(!isProject || (generated?.notes.length ?? 0) > 0
+      ? [{ key: "notes" as TabKey, label: isProject ? "Notes" : "Study notes", icon: NotebookPen }]
+      : []),
+    ...(!isProject || hasRevisionContent || cards.length > 0
+      ? [{ key: "revision" as TabKey, label: isProject ? "Rehearse" : "Revision", icon: BookOpen }]
+      : []),
+    // Always available on projects — it hosts the "cue cards from my draft" tool.
+    { key: "flashcards" as TabKey, label: isProject ? "Cue cards" : "Flashcards", icon: Layers },
+    ...(!isProject || tests.length > 0
+      ? [{ key: "tests" as TabKey, label: "Tests", icon: ClipboardCheck }]
+      : []),
     ...(features.essayTools
       ? [{ key: "essay" as TabKey, label: "Essay tools", icon: BookOpen }]
       : []),
     { key: "tutor", label: "AI Tutor", icon: MessageSquare },
     { key: "resources", label: "Resources", icon: Paperclip },
   ];
+
+  // If the active tab is hidden (e.g. after toggling Study ↔ Project), render
+  // Summary instead of an orphaned panel. Derived, not an effect — this sits
+  // below an early return, so hooks aren't allowed here.
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : "summary";
 
   return (
     <div>
@@ -186,7 +221,7 @@ export default function AssessmentWorkspace({
             onClick={() => setTab(t.key)}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13.5px] font-medium transition-colors",
-              tab === t.key
+              activeTab === t.key
                 ? "bg-anchor/10 text-anchor"
                 : "text-ink-soft hover:bg-black/[0.04]"
             )}
@@ -200,32 +235,43 @@ export default function AssessmentWorkspace({
       <div className="mt-4">
         <AnimatePresence mode="wait">
           <motion.div
-            key={tab}
+            key={activeTab}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
           >
-            {tab === "summary" &&
+            {activeTab === "summary" &&
               (generated ? (
                 <SummaryView assessment={assessment} />
               ) : (
                 <LockedHint label="summary" />
               ))}
-            {tab === "notes" &&
+            {activeTab === "notification" && <NotificationView assessment={assessment} />}
+            {activeTab === "notes" &&
               (generated ? <NotesView assessment={assessment} /> : <LockedHint label="study notes" />)}
-            {tab === "revision" &&
-              (generated ? <RevisionView assessment={assessment} /> : <LockedHint label="revision hub" />)}
-            {tab === "flashcards" && (
+            {activeTab === "revision" &&
+              (isProject ? (
+                <RehearseView
+                  assessment={assessment}
+                  cardCount={cards.length}
+                  onOpenCueCards={() => setTab("flashcards")}
+                />
+              ) : generated ? (
+                <RevisionView assessment={assessment} />
+              ) : (
+                <LockedHint label="revision hub" />
+              ))}
+            {activeTab === "flashcards" && (
               <FlashcardsView cards={cards} subject={subject} assessment={assessment} />
             )}
-            {tab === "tests" && (
+            {activeTab === "tests" && (
               <TestsView tests={tests} subject={subject} assessment={assessment} />
             )}
-            {tab === "plan" && <PlanView assessment={assessment} />}
-            {tab === "essay" && <EssayTools subject={subject} assessment={assessment} />}
-            {tab === "tutor" && <AssessmentTutor subject={subject} assessment={assessment} />}
-            {tab === "resources" && <ResourcesView subject={subject} assessment={assessment} />}
+            {activeTab === "plan" && <PlanView assessment={assessment} />}
+            {activeTab === "essay" && <EssayTools subject={subject} assessment={assessment} />}
+            {activeTab === "tutor" && <AssessmentTutor subject={subject} assessment={assessment} />}
+            {activeTab === "resources" && <ResourcesView subject={subject} assessment={assessment} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -480,6 +526,94 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── summary ─────────────────────────────────────────────────────
 
+const NOTIF_PROSE =
+  "text-[14px] leading-relaxed text-ink [&_a]:font-medium [&_a]:text-anchor [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-3 [&_blockquote]:text-ink-muted [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-black/[0.08] [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_strong]:font-semibold [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-black/10 [&_td]:p-2 [&_th]:border [&_th]:border-black/10 [&_th]:bg-black/[0.03] [&_th]:p-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5";
+
+/** The exact assessment notification: Canvas's original HTML or the uploaded
+ *  text, plus an optional AI re-format (structure only — wording verbatim). */
+function NotificationView({ assessment }: { assessment: Assessment }) {
+  const setNotification = useData((s) => s.setNotification);
+  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<"formatted" | "original">("formatted");
+  const n = assessment.notification;
+  if (!n) return null;
+
+  const aiHtml = n.aiHtml ? sanitizeCanvasHtml(n.aiHtml) : "";
+  const origHtml = n.html ? sanitizeCanvasHtml(n.html) : "";
+  const showFormatted = !!aiHtml && view === "formatted";
+
+  async function tidy() {
+    if (!n || busy) return;
+    setBusy(true);
+    try {
+      const html = await ai.formatNotification(n.rawText);
+      if (html && html.length > 4) {
+        setNotification(assessment.id, { ...n, aiHtml: html });
+        setView("formatted");
+      }
+    } catch {
+      // Plan block handled by the global upgrade modal.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <GlassCard className="p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] pb-3">
+        <div className="flex items-center gap-2 text-[13px]">
+          <FileText size={15} className="text-ink-faint" />
+          <span className="font-medium text-ink">{n.fileName || "Notification"}</span>
+          <span className="text-[12px] text-ink-faint">
+            · {n.fileType === "canvas" ? "synced" : "uploaded"}{" "}
+            {new Date(n.uploadedAt).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+            })}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {aiHtml ? (
+            <div className="flex gap-1 rounded-full bg-black/[0.04] p-0.5 text-[12px] font-medium">
+              {(["formatted", "original"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-full px-3 py-1 capitalize transition-colors",
+                    view === v ? "bg-white text-ink shadow-sm" : "text-ink-soft"
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={tidy} disabled={busy}>
+              <Sparkles size={14} /> {busy ? "Formatting…" : "Format with AI"}
+            </Button>
+          )}
+        </div>
+      </div>
+      {showFormatted ? (
+        <div className={NOTIF_PROSE} dangerouslySetInnerHTML={{ __html: aiHtml }} />
+      ) : origHtml ? (
+        <div className={NOTIF_PROSE} dangerouslySetInnerHTML={{ __html: origHtml }} />
+      ) : (
+        <pre className="whitespace-pre-wrap font-sans text-[14px] leading-relaxed text-ink">
+          {n.rawText}
+        </pre>
+      )}
+      {showFormatted && (
+        <p className="mt-4 border-t border-black/[0.06] pt-3 text-[12px] text-ink-faint">
+          AI-tidied layout — the wording is untouched. Switch to “Original” to
+          see it exactly as it came in.
+        </p>
+      )}
+    </GlassCard>
+  );
+}
+
 function SummaryView({ assessment }: { assessment: Assessment }) {
   const s = assessment.generated!.summary;
   return (
@@ -497,7 +631,10 @@ function SummaryView({ assessment }: { assessment: Assessment }) {
         <GlassCard className="p-6">
           <h3 className="text-[15px] font-semibold text-ink">At a glance</h3>
           <div className="mt-3 space-y-2.5 text-sm">
-            <Row label="Due" value={dueLabel(s.dueDate || assessment.dueDate)} />
+            <Row
+              label="Due"
+              value={statusDueLabel(s.dueDate || assessment.dueDate, assessment.status === "completed")}
+            />
             {s.weighting && <Row label="Weighting" value={s.weighting} />}
             <Row label="Term" value={assessment.term || "—"} />
             <Row label="Priority" value={assessment.priority} />
